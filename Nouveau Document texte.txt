@@ -1,0 +1,2 @@
+cd Desktop\planning-enogia-2026
+npm run deploy
