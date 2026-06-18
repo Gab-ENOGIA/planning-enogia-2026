@@ -35,6 +35,48 @@ const T = {
   fontDisplay:"'Space Grotesk','Inter',-apple-system,sans-serif",
 };
 
+const PJ_META={
+  "PJ376":{nomProjet:"GAEC - ADELINE",pays:"France",chefProjet:"Clément Martouzet"},
+  "PJ382-40":{nomProjet:"SHEFFIELD",pays:"UK",chefProjet:"Gabriel VINCENT"},
+  "PJ382-180":{nomProjet:"SHEFFIELD",pays:"UK",chefProjet:"Gabriel VINCENT"},
+  "PJ420":{nomProjet:"ST GOBAIN",pays:"France",chefProjet:"Clément Martouzet"},
+  "PJ430":{nomProjet:"AATF - PYROGENESYS",pays:"Nigeria",chefProjet:"Gabriel VINCENT"},
+  "PJ446-1":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-2":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-3":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-4":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-5":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-6":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-7":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-8":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-9":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-10":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-11":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ446-12":{nomProjet:"ULSAN",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ449":{nomProjet:"ADUNA - KELSEN",pays:"Espagne",chefProjet:"Emmy BOURELLY"},
+  "PJ453":{nomProjet:"INEOS",pays:"France",chefProjet:"Clément Bablon"},
+  "PJ456":{nomProjet:"ADDFIELD",pays:"UK",chefProjet:"Emmy BOURELLY"},
+  "PJ461-1":{nomProjet:"CHEM SOLV",pays:"Singapore",chefProjet:"Gabriel VINCENT"},
+  "PJ461-2":{nomProjet:"CHEM SOLV",pays:"Singapore",chefProjet:"Gabriel VINCENT"},
+  "PJ461-3":{nomProjet:"CHEM SOLV",pays:"Singapore",chefProjet:"Gabriel VINCENT"},
+  "PJ461-4":{nomProjet:"CHEM SOLV",pays:"Singapore",chefProjet:"Gabriel VINCENT"},
+  "PJ461-5":{nomProjet:"CHEM SOLV",pays:"Singapore",chefProjet:"Gabriel VINCENT"},
+  "PJ462-1":{nomProjet:"ULMATEC OCV",pays:"Norvège",chefProjet:"Gabriel VINCENT"},
+  "PJ472":{nomProjet:"HANNES",pays:"Islande",chefProjet:"Emmy BOURELLY"},
+  "PJ473":{nomProjet:"RIMS",pays:"Corée",chefProjet:"Clément Martouzet"},
+  "PJ476":{nomProjet:"KBS-WP1 (études)",pays:"UK",chefProjet:"Clément Bablon"},
+  "PJ479-1":{nomProjet:"EDF PEI",pays:"FR-La Réunion",chefProjet:"Clément Martouzet"},
+  "PJ479-2":{nomProjet:"EDF PEI",pays:"FR-La Réunion",chefProjet:"Clément Martouzet"},
+  "PJ485":{nomProjet:"BIOSORRA",pays:"Kenya",chefProjet:"Clément Martouzet"},
+  "PJ486":{nomProjet:"ALBRET",pays:"France",chefProjet:"Emmy BOURELLY"},
+};
+function getPjMeta(pj){
+  if(PJ_META[pj])return PJ_META[pj];
+  const prefix=pj.split("-")[0];
+  const fallbackKey=Object.keys(PJ_META).find(k=>k.split("-")[0]===prefix);
+  return fallbackKey?PJ_META[fallbackKey]:{nomProjet:"—",pays:"—",chefProjet:"—"};
+}
+
 const GAMME_COLORS={"180LTV3":T.teal500,"100LTV3":T.violet500,"40LTV3":T.emerald500,"180MT":T.red500,"100MT":"#c2761a","20LTV3":"#0e8fa8","10LTV3":"#6b9b1f","40LTV2R":T.amber500,"100LTV2R":"#9333ea","CONTENEUR":T.ink500};
 const ETAT_META={
   "SHIPPED":{bg:T.emerald100,text:T.emerald600,border:"#8fdcb8",bar:T.emerald500,label:"Expédiée"},
@@ -52,7 +94,7 @@ function parseDateAny(s){
   if(!s)return null;
   s=String(s).trim();if(!s)return null;
   const mFR={"janvier":0,"février":1,"fevrier":1,"mars":2,"avril":3,"mai":4,"juin":5,"juillet":6,"août":7,"aout":7,"septembre":8,"octobre":9,"novembre":10,"décembre":11,"decembre":11};
-  let m=s.match(/(\d+)\s+(\w+)\s+(\d{4})/i);
+  let m=s.match(/(\d+)\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
   if(m){const mo=mFR[m[2].toLowerCase()];if(mo!==undefined)return new Date(+m[3],mo,+m[1]);}
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(m)return new Date(+m[3],+m[2]-1,+m[1]);
@@ -129,7 +171,7 @@ function parseMSProjectRows(rows){
   }));
 }
 
-function Badge({etat}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];return <span style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:6,padding:"3px 10px",fontSize:12,fontWeight:600,whiteSpace:"nowrap",letterSpacing:".01em"}}>{c.label||etat}</span>;}
+function Badge({etat}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];return <span style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:6,padding:"3px 10px",fontSize:15,fontWeight:600,whiteSpace:"nowrap",letterSpacing:".01em"}}>{c.label||etat}</span>;}
 
 function DropFilter({label,options,selected,onChange,getLabel}){
   const [open,setOpen]=useState(false);
@@ -139,28 +181,28 @@ function DropFilter({label,options,selected,onChange,getLabel}){
   const disp=o=>getLabel?getLabel(o):o;
   return(
     <div style={{position:"relative",display:"inline-block"}}>
-      <button onClick={()=>setOpen(v=>!v)} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+(!all||open?T.teal500:T.line),background:!all?T.teal100:T.card,color:!all?T.teal600:T.ink700,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",fontFamily:T.font,transition:"border-color .15s"}}>
-        {label}{!all?" ("+selected.size+")":""}<span style={{fontSize:9,color:T.ink500}}>{open?"▲":"▼"}</span>
+      <button onClick={()=>setOpen(v=>!v)} style={{padding:"10px 17px",borderRadius:10,border:"1.5px solid "+(!all||open?T.teal500:T.line),background:!all?T.teal100:T.card,color:!all?T.teal600:T.ink700,fontSize:16,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",fontFamily:T.font,transition:"border-color .15s"}}>
+        {label}{!all?" ("+selected.size+")":""}<span style={{fontSize:12,color:T.ink500}}>{open?"▲":"▼"}</span>
       </button>
       {open&&<div style={{position:"fixed",background:T.card,borderRadius:12,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,minWidth:210,maxHeight:320,display:"flex",flexDirection:"column",fontFamily:T.font}}>
         <div onClick={()=>onChange(all?new Set():new Set(options))} style={{display:"flex",alignItems:"center",gap:9,padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid "+T.line,background:T.surface,flexShrink:0,borderRadius:"12px 12px 0 0"}}>
           <div style={{width:16,height:16,borderRadius:4,border:"1.5px solid "+(all?T.teal500:T.ink100),background:all?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {all&&<span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}
-            {!all&&!none&&<span style={{color:T.teal600,fontSize:11,fontWeight:700}}>—</span>}
+            {all&&<span style={{color:"#fff",fontSize:13,fontWeight:700}}>✓</span>}
+            {!all&&!none&&<span style={{color:T.teal600,fontSize:14,fontWeight:700}}>—</span>}
           </div>
-          <span style={{fontSize:13,fontWeight:700,color:T.ink700}}>Tout sélectionner</span>
+          <span style={{fontSize:16,fontWeight:700,color:T.ink700}}>Tout sélectionner</span>
         </div>
         <div style={{overflowY:"auto",flex:1}}>
           {options.map(o=>{const a=selected.has(o);return(
             <div key={o} onClick={()=>toggle(o)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 14px",cursor:"pointer",background:a?T.teal100:T.card,borderBottom:"1px solid "+T.surface}}>
-              <div style={{width:16,height:16,borderRadius:4,border:"1.5px solid "+(a?T.teal500:T.ink100),background:a?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{a&&<span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}</div>
-              <span style={{fontSize:13,color:T.ink700,fontWeight:a?600:400}}>{disp(o)}</span>
+              <div style={{width:16,height:16,borderRadius:4,border:"1.5px solid "+(a?T.teal500:T.ink100),background:a?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{a&&<span style={{color:"#fff",fontSize:13,fontWeight:700}}>✓</span>}</div>
+              <span style={{fontSize:16,color:T.ink700,fontWeight:a?600:400}}>{disp(o)}</span>
             </div>
           );})}
         </div>
         <div style={{padding:"8px 14px",borderTop:"1px solid "+T.line,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surface,flexShrink:0,borderRadius:"0 0 12px 12px"}}>
-          <span style={{fontSize:11,color:T.ink500,fontWeight:500}}>{selected.size}/{options.length}</span>
-          <button onClick={()=>setOpen(false)} style={{padding:"4px 14px",borderRadius:7,border:"none",background:T.teal500,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>OK</button>
+          <span style={{fontSize:14,color:T.ink500,fontWeight:500}}>{selected.size}/{options.length}</span>
+          <button onClick={()=>setOpen(false)} style={{padding:"4px 14px",borderRadius:7,border:"none",background:T.teal500,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>OK</button>
         </div>
       </div>}
     </div>
@@ -206,21 +248,21 @@ function GanttView({data,progress,df}){
 
   return(<div style={{background:T.card,borderRadius:16,overflow:"hidden",boxShadow:T.shadowMd,fontFamily:T.font}}>
     <div style={{display:"flex",gap:10,padding:"14px 18px",borderBottom:"1px solid "+T.line,alignItems:"center",flexWrap:"wrap",background:T.surface}}>
-      <span style={{fontSize:13,fontWeight:700,color:T.navy800}}>Planning {year}</span>
-      <span style={{fontSize:12,color:T.ink500}}>Faites glisser ou utilisez la molette pour défiler →</span>
-      <button onClick={()=>scrollToDay(dayOf(today))} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:12,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
+      <span style={{fontSize:16,fontWeight:700,color:T.navy800}}>Planning {year}</span>
+      <span style={{fontSize:15,color:T.ink500}}>Faites glisser ou utilisez la molette pour défiler →</span>
+      <button onClick={()=>scrollToDay(dayOf(today))} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
     </div>
 
     <div ref={scrollRef} style={{display:"flex",overflowX:"auto",position:"relative"}}>
       <div style={{width:colW,flexShrink:0,position:"sticky",left:0,zIndex:5,background:T.card,borderRight:"1px solid "+T.line,boxShadow:"2px 0 6px rgba(15,40,60,.04)"}}>
-        <div style={{height:46,padding:"0 16px",display:"flex",alignItems:"center",fontSize:11,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".04em",borderBottom:"1px solid "+T.line,background:T.surface}}>Projet</div>
+        <div style={{height:46,padding:"0 16px",display:"flex",alignItems:"center",fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".04em",borderBottom:"1px solid "+T.line,background:T.surface}}>Projet</div>
         {data.map((r,ri)=>{
           const c=ETAT_META[r.etat]||ETAT_META["NOT ORDERED"];
           const pv=progress[r.pj];
           return(<div key={ri} style={{height:44,padding:"0 16px",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid "+T.surface}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:c.bar,flexShrink:0}}/>
-            <span style={{fontSize:13,fontWeight:700,color:T.teal600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{r.pj}</span>
-            {pv!=null&&<span style={{fontSize:10,fontWeight:700,color:pv>=100?T.emerald600:T.amber600,background:pv>=100?T.emerald100:T.amber100,padding:"2px 6px",borderRadius:5,flexShrink:0}}>{pv}%</span>}
+            <span style={{fontSize:16,fontWeight:700,color:T.teal600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{r.pj}</span>
+            {pv!=null&&<span style={{fontSize:13,fontWeight:700,color:pv>=100?T.emerald600:T.amber600,background:pv>=100?T.emerald100:T.amber100,padding:"2px 6px",borderRadius:5,flexShrink:0}}>{pv}%</span>}
           </div>);
         })}
       </div>
@@ -229,10 +271,10 @@ function GanttView({data,progress,df}){
         {/* en-tête mois + semaines */}
         <div style={{height:46,position:"relative",borderBottom:"1px solid "+T.line,background:T.surface}}>
           {MONTHS_FULL.map((mn,mi)=>{const ms=new Date(year,mi,1);const me=new Date(year,mi+1,1);const w=(xOf(me)-xOf(ms));const isCur=mi===today.getMonth();
-            return(<div key={mi} style={{position:"absolute",left:xOf(ms),width:w,top:0,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:isCur?T.teal600:T.ink700,borderLeft:"1px solid "+T.line,background:isCur?T.teal100:"transparent"}}>{MONTHS[mi]}</div>);
+            return(<div key={mi} style={{position:"absolute",left:xOf(ms),width:w,top:0,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:isCur?T.teal600:T.ink700,borderLeft:"1px solid "+T.line,background:isCur?T.teal100:"transparent"}}>{MONTHS[mi]}</div>);
           })}
           {weekMarks.map((wm,wi)=>(
-            <div key={wi} style={{position:"absolute",left:xOf(wm),top:22,height:24,width:dayW*7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:T.ink300,borderLeft:"1px solid "+T.surfaceAlt,fontWeight:500}}>{wm.getDate()}</div>
+            <div key={wi} style={{position:"absolute",left:xOf(wm),top:22,height:24,width:dayW*7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.ink300,borderLeft:"1px solid "+T.surfaceAlt,fontWeight:500}}>{wm.getDate()}</div>
           ))}
         </div>
 
@@ -246,7 +288,7 @@ function GanttView({data,progress,df}){
             {MONTHS_FULL.map((_,mi)=><div key={mi} style={{position:"absolute",left:xOf(new Date(year,mi,1)),top:0,bottom:0,width:1,background:T.line}}/>)}
             {mb&&<div style={{position:"absolute",left:mb.left,width:mb.width,top:"50%",transform:"translateY(-50%)",height:20,background:c.bar,borderRadius:6,opacity:.16,zIndex:1}}/>}
             {PHASES.map(ph=>{const dt=r[ph.k];if(!dt)return null;const x=xOf(new Date(dt));
-              return(<div key={ph.k} style={{position:"absolute",left:x,top:"50%",transform:"translate(-50%,-50%)",width:24,height:24,borderRadius:"50%",background:ph.c,border:"2.5px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",zIndex:4,cursor:"pointer",boxShadow:"0 2px 5px rgba(0,0,0,.18)"}}>{ph.l}</div>);
+              return(<div key={ph.k} style={{position:"absolute",left:x,top:"50%",transform:"translate(-50%,-50%)",width:24,height:24,borderRadius:"50%",background:ph.c,border:"2.5px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#fff",zIndex:4,cursor:"pointer",boxShadow:"0 2px 5px rgba(0,0,0,.18)"}}>{ph.l}</div>);
             })}
           </div>);
         })}
@@ -256,13 +298,13 @@ function GanttView({data,progress,df}){
       </div>
     </div>
 
-    {tt&&<div style={{position:"fixed",left:Math.min(tt.x+12,window.innerWidth-230),top:tt.y-10,background:T.navy900,color:"#fff",borderRadius:10,padding:"12px 16px",fontSize:13,zIndex:9999,pointerEvents:"none",minWidth:200,fontFamily:T.font,boxShadow:T.shadowLg}}>
-      <div style={{fontWeight:700,fontSize:15,marginBottom:8,color:T.teal400}}>{tt.r.pj}</div>
+    {tt&&<div style={{position:"fixed",left:Math.min(tt.x+12,window.innerWidth-230),top:tt.y-10,background:T.navy900,color:"#fff",borderRadius:10,padding:"12px 16px",fontSize:16,zIndex:9999,pointerEvents:"none",minWidth:200,fontFamily:T.font,boxShadow:T.shadowLg}}>
+      <div style={{fontWeight:700,fontSize:19,marginBottom:8,color:T.teal400}}>{tt.r.pj}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-        {[["Arrivée",tt.r.arrivee],["Tests",tt.r.tests],["Fin prod",tt.r.finProd],["Départ",tt.r.depart]].map(([l,d])=><div key={l}><span style={{color:T.ink300,fontSize:11}}>{l}</span><br/><b>{fmtMode(d?new Date(d):null,df)}</b></div>)}
+        {[["Arrivée",tt.r.arrivee],["Tests",tt.r.tests],["Fin prod",tt.r.finProd],["Départ",tt.r.depart]].map(([l,d])=><div key={l}><span style={{color:T.ink300,fontSize:14}}>{l}</span><br/><b>{fmtMode(d?new Date(d):null,df)}</b></div>)}
       </div>
       <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid rgba(255,255,255,.15)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <Badge etat={tt.r.etat}/><span style={{color:T.ink300,fontSize:11}}>{tt.r.gamme}</span>
+        <Badge etat={tt.r.etat}/><span style={{color:T.ink300,fontSize:14}}>{tt.r.gamme}</span>
       </div>
     </div>}
 
@@ -275,13 +317,90 @@ function GanttView({data,progress,df}){
         );})}
         <div style={{position:"absolute",left:(dayOf(today)/totalDays)*100+"%",top:0,bottom:0,width:2,background:T.red500}}/>
         {MONTHS.map((mn,mi)=>{const ms=new Date(year,mi,1);const left=((dayOf(ms)+15)/totalDays)*100;return(
-          <span key={mi} style={{position:"absolute",left:left+"%",top:2,fontSize:9,color:T.ink500,fontWeight:600,transform:"translateX(-50%)"}}>{mn}</span>
+          <span key={mi} style={{position:"absolute",left:left+"%",top:2,fontSize:12,color:T.ink500,fontWeight:600,transform:"translateX(-50%)"}}>{mn}</span>
         );})}
       </div>
     </div>
 
     <div style={{padding:"10px 18px",borderTop:"1px solid "+T.line,display:"flex",gap:14,flexWrap:"wrap",background:T.surface}}>
-      {PHASES.map(ph=><span key={ph.k} style={{display:"flex",alignItems:"center",gap:6,fontSize:12}}><span style={{width:18,height:18,borderRadius:"50%",background:ph.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:700}}>{ph.l}</span><span style={{color:T.ink500,fontWeight:500}}>{ph.t}</span></span>)}
+      {PHASES.map(ph=><span key={ph.k} style={{display:"flex",alignItems:"center",gap:6,fontSize:15}}><span style={{width:18,height:18,borderRadius:"50%",background:ph.c,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",fontWeight:700}}>{ph.l}</span><span style={{color:T.ink500,fontWeight:500}}>{ph.t}</span></span>)}
+    </div>
+  </div>);
+}
+
+function ProjectModal({pj,data,df,onClose}){
+  const r=data.find(x=>x.pj===pj);
+  if(!r)return null;
+  const meta=getPjMeta(pj);
+  const dates=PHASES.map(ph=>({...ph,date:r[ph.k]?new Date(r[ph.k]):null})).filter(p=>p.date);
+  if(dates.length===0)return null;
+  const minD=new Date(Math.min(...dates.map(d=>d.date)));
+  const maxD=new Date(Math.max(...dates.map(d=>d.date)));
+  // mois à afficher : du mois de la première étape au mois de la dernière (max 3 pour rester lisible)
+  const months=[];
+  let cur=new Date(minD.getFullYear(),minD.getMonth(),1);
+  const end=new Date(maxD.getFullYear(),maxD.getMonth(),1);
+  while(cur<=end&&months.length<3){months.push(new Date(cur));cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);}
+
+  const evByDay=(y,m)=>{
+    const map={};
+    dates.forEach(d=>{if(d.date.getFullYear()===y&&d.date.getMonth()===m){const day=d.date.getDate();if(!map[day])map[day]=[];map[day].push(d);}});
+    return map;
+  };
+
+  return(<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(12,36,54,.55)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:T.font}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:T.card,borderRadius:18,padding:28,maxWidth:640,width:"100%",maxHeight:"86vh",overflowY:"auto",boxShadow:T.shadowLg}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+        <div>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:25,color:T.navy900}}>{pj}</div>
+          <div style={{color:T.ink500,fontSize:16,marginTop:3,fontWeight:500}}>{meta.nomProjet} · {meta.pays} · {meta.chefProjet}</div>
+        </div>
+        <button onClick={onClose} style={{background:T.surface,border:"none",borderRadius:9,width:36,height:36,fontSize:18,cursor:"pointer",color:T.ink700,flexShrink:0}}>✕</button>
+      </div>
+
+      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <Badge etat={r.etat}/>
+        <span style={{fontSize:15,color:T.ink500,alignSelf:"center"}}>{r.gamme}</span>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:24}}>
+        {PHASES.map(ph=>{const d=r[ph.k]?new Date(r[ph.k]):null;return(
+          <div key={ph.k} style={{background:T.surface,borderRadius:10,padding:"11px 14px",borderTop:"3px solid "+ph.c}}>
+            <div style={{color:T.ink500,fontSize:13,fontWeight:600,textTransform:"uppercase",letterSpacing:".03em"}}>{ph.t}</div>
+            <div style={{fontWeight:700,color:T.navy800,fontSize:19,marginTop:3}}>{d?fmtMode(d,df):"—"}</div>
+          </div>
+        );})}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat("+months.length+",1fr)",gap:14}}>
+        {months.map((mo,mi)=>{
+          const y=mo.getFullYear(),m=mo.getMonth();
+          const de=evByDay(y,m);
+          const fd=new Date(y,m,1).getDay();
+          const adj=(fd+6)%7;
+          const dim=new Date(y,m+1,0).getDate();
+          const cells=[...Array(adj).fill(null),...Array.from({length:dim},(_,i)=>i+1)];
+          return(<div key={mi}>
+            <div style={{textAlign:"center",fontWeight:700,fontSize:14,color:T.navy800,marginBottom:8}}>{MONTHS_FULL[m]} {y}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+              {["L","M","M","J","V","S","D"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:10,fontWeight:700,color:T.ink300}}>{d}</div>)}
+              {cells.map((day,ci)=>{
+                if(!day)return<div key={"e"+ci}/>;
+                const evs=de[day]||[];
+                const isToday=day===today.getDate()&&m===today.getMonth()&&y===today.getFullYear();
+                return(<div key={day} style={{aspectRatio:"1",borderRadius:7,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:evs.length?700:500,color:evs.length?"#fff":isToday?T.teal600:T.ink700,background:evs.length?evs[0].c:isToday?T.teal100:"transparent",border:isToday&&!evs.length?"1.5px solid "+T.teal400:"none",position:"relative"}}>
+                  {day}
+                  {evs.length>1&&<div style={{position:"absolute",bottom:1,right:2,fontSize:7,color:"#fff"}}>+{evs.length-1}</div>}
+                </div>);
+              })}
+            </div>
+          </div>);
+        })}
+      </div>
+
+      <div style={{display:"flex",gap:14,marginTop:18,paddingTop:14,borderTop:"1px solid "+T.line,flexWrap:"wrap"}}>
+        {PHASES.map(ph=><span key={ph.k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><span style={{width:13,height:13,borderRadius:4,background:ph.c}}/><span style={{color:T.ink500}}>{ph.t}</span></span>)}
+      </div>
     </div>
   </div>);
 }
@@ -291,37 +410,34 @@ function TableView({data,progress,df}){
   return(<div style={{background:T.card,borderRadius:14,overflow:"auto",boxShadow:T.shadowMd,fontFamily:T.font}}>
     <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"auto"}}>
       <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line}}>
-        {["N° PJ","Gamme","État","Arrivée","Tests","Fin prod","Départ","J restants"].map(h=><th key={h} style={{padding:"12px 16px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:12,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>)}
+        {["N° PJ","Projet","Pays","Chef de Projet","Gamme","État","Arrivée","Tests","Fin prod","Départ","J restants"].map(h=><th key={h} style={{padding:"12px 16px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:15,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".04em"}}>{h}</th>)}
       </tr></thead>
       <tbody>{data.map((r,i)=>{
         const dl=r.depart?diffDays(today,new Date(r.depart)):null;
         const urgent=dl!=null&&dl>=0&&dl<=30;
         const done=r.etat==="SHIPPED";
         const pval=progress[r.pj];
+        const meta=getPjMeta(r.pj);
         return(<tr key={i} onClick={()=>setSel(sel===r.pj?null:r.pj)} style={{borderBottom:"1px solid "+T.surface,cursor:"pointer",background:sel===r.pj?T.teal100:T.card,transition:"background .1s"}}>
-          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:14,whiteSpace:"nowrap"}}>{r.pj}</td>
-          <td style={{padding:"13px 16px",color:T.ink500,fontSize:13,whiteSpace:"nowrap"}}>{r.gamme}</td>
+          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:17,whiteSpace:"nowrap"}}>{r.pj}</td>
+          <td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",fontWeight:600}}>{meta.nomProjet}</td>
+          <td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap"}}>{meta.pays}</td>
+          <td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap"}}>{meta.chefProjet}</td>
+          <td style={{padding:"13px 16px",color:T.ink500,fontSize:16,whiteSpace:"nowrap"}}>{r.gamme}</td>
           <td style={{padding:"13px 16px",whiteSpace:"nowrap"}}><Badge etat={r.etat}/></td>
-          <td style={{padding:"13px 16px",color:T.ink700,fontSize:14,whiteSpace:"nowrap"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>
-          <td style={{padding:"13px 16px",color:T.ink700,fontSize:14,whiteSpace:"nowrap"}}>{r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}</td>
-          <td style={{padding:"13px 16px",color:T.ink700,fontSize:14,whiteSpace:"nowrap"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>
-          <td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:14,whiteSpace:"nowrap"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>
+          <td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>
+          <td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap"}}>{r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}</td>
+          <td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>
+          <td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:17,whiteSpace:"nowrap"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>
           <td style={{padding:"13px 16px",whiteSpace:"nowrap"}}>
-            {pval!=null?<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:48,background:T.surfaceAlt,borderRadius:5,height:7,overflow:"hidden"}}><div style={{width:pval+"%",height:"100%",background:pval>=100?T.emerald500:pval>=50?T.teal500:T.amber500}}/></div><span style={{fontSize:12,fontWeight:700,color:T.ink700}}>{pval}%</span></div>
-            :done?<span style={{color:T.emerald600,fontSize:14,fontWeight:700}}>✓</span>
-            :dl==null||dl<0?<span style={{color:T.ink300}}>—</span>:<span style={{color:urgent?T.amber600:T.ink700,fontWeight:urgent?700:500,fontSize:14}}>{dl}j</span>}
+            {pval!=null?<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:48,background:T.surfaceAlt,borderRadius:5,height:7,overflow:"hidden"}}><div style={{width:pval+"%",height:"100%",background:pval>=100?T.emerald500:pval>=50?T.teal500:T.amber500}}/></div><span style={{fontSize:15,fontWeight:700,color:T.ink700}}>{pval}%</span></div>
+            :done?<span style={{color:T.emerald600,fontSize:17,fontWeight:700}}>✓</span>
+            :dl==null||dl<0?<span style={{color:T.ink300}}>—</span>:<span style={{color:urgent?T.amber600:T.ink700,fontWeight:urgent?700:500,fontSize:17}}>{dl}j</span>}
           </td>
         </tr>);
       })}</tbody>
     </table>
-    {sel&&(()=>{const r=data.find(x=>x.pj===sel);if(!r)return null;return(
-      <div style={{margin:16,background:T.teal100,borderRadius:12,padding:16,border:"1px solid "+T.teal400}}>
-        <div style={{fontWeight:700,fontSize:15,color:T.navy800,marginBottom:10}}>{r.pj} — {r.nom||r.gamme}</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}}>
-          {[["Arrivée",r.arrivee],["Tests",r.tests],["Fin prod",r.finProd],["Départ",r.depart]].map(([l,d])=><div key={l} style={{background:T.card,borderRadius:9,padding:"9px 13px",boxShadow:T.shadowSm}}><div style={{color:T.ink500,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:".03em"}}>{l}</div><div style={{fontWeight:700,color:T.navy800,fontSize:15,marginTop:2}}>{fmtMode(d?new Date(d):null,df)}</div></div>)}
-        </div>
-      </div>
-    );})()}
+    {sel&&<ProjectModal pj={sel} data={data} df={df} onClose={()=>setSel(null)}/>}
   </div>);
 }
 
@@ -350,11 +466,11 @@ function CalendarView({data}){
   return(<div style={{background:T.card,borderRadius:14,overflow:"hidden",boxShadow:T.shadowMd,fontFamily:T.font}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px",background:"linear-gradient(135deg,"+T.navy900+","+T.teal600+")"}}>
       <div style={{display:"flex",gap:6,alignItems:"center"}}>
-        <button onClick={()=>setSm(m=>Math.max(0,m-nm))} style={{background:"rgba(255,255,255,.16)",border:"none",color:"#fff",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:15}}>◀</button>
-        <span style={{fontWeight:700,fontSize:15,color:"#fff",minWidth:220,textAlign:"center"}}>{MONTHS_FULL[mons[0]]}{nm>1?" – "+MONTHS_FULL[mons[mons.length-1]]:""} {year}</span>
-        <button onClick={()=>setSm(m=>Math.min(12-nm,m+nm))} style={{background:"rgba(255,255,255,.16)",border:"none",color:"#fff",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:15}}>▶</button>
+        <button onClick={()=>setSm(m=>Math.max(0,m-nm))} style={{background:"rgba(255,255,255,.16)",border:"none",color:"#fff",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:19}}>◀</button>
+        <span style={{fontWeight:700,fontSize:19,color:"#fff",minWidth:220,textAlign:"center"}}>{MONTHS_FULL[mons[0]]}{nm>1?" – "+MONTHS_FULL[mons[mons.length-1]]:""} {year}</span>
+        <button onClick={()=>setSm(m=>Math.min(12-nm,m+nm))} style={{background:"rgba(255,255,255,.16)",border:"none",color:"#fff",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:19}}>▶</button>
       </div>
-      <div style={{display:"flex",gap:5}}>{[1,2,3,4].map(n=><button key={n} onClick={()=>{setNm(n);if(sm+n>12)setSm(12-n);}} style={{padding:"5px 11px",borderRadius:7,border:"none",background:nm===n?"#fff":"rgba(255,255,255,.16)",color:nm===n?T.navy800:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>{n}</button>)}</div>
+      <div style={{display:"flex",gap:5}}>{[1,2,3,4].map(n=><button key={n} onClick={()=>{setNm(n);if(sm+n>12)setSm(12-n);}} style={{padding:"5px 11px",borderRadius:7,border:"none",background:nm===n?"#fff":"rgba(255,255,255,.16)",color:nm===n?T.navy800:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>{n}</button>)}</div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat("+nm+",1fr)",overflowX:"auto"}}>
       {mons.map(m=>{
@@ -364,9 +480,9 @@ function CalendarView({data}){
         const dim=new Date(year,m+1,0).getDate();
         const cells=[...Array(adj).fill(null),...Array.from({length:dim},(_,i)=>i+1)];
         return(<div key={m} style={{borderRight:"1px solid "+T.line,minWidth:200}}>
-          <div style={{padding:"8px",background:T.surface,borderBottom:"1px solid "+T.line,fontWeight:700,color:T.navy800,fontSize:13,textAlign:"center"}}>{MONTHS_FULL[m]}</div>
+          <div style={{padding:"8px",background:T.surface,borderBottom:"1px solid "+T.line,fontWeight:700,color:T.navy800,fontSize:16,textAlign:"center"}}>{MONTHS_FULL[m]}</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 0.55fr 0.55fr",background:T.surfaceAlt,borderBottom:"1px solid "+T.line}}>
-            {["L","M","M","J","V","S","D"].map((d,i)=><div key={i} style={{textAlign:"center",padding:"4px 0",fontSize:11,fontWeight:700,color:i>=5?T.ink300:T.ink500}}>{d}</div>)}
+            {["L","M","M","J","V","S","D"].map((d,i)=><div key={i} style={{textAlign:"center",padding:"4px 0",fontSize:14,fontWeight:700,color:i>=5?T.ink300:T.ink500}}>{d}</div>)}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 0.55fr 0.55fr"}}>
             {cells.map((day,ci)=>{
@@ -376,9 +492,9 @@ function CalendarView({data}){
               const evs=de[day]||[];
               const isSel=pd===day&&pm===m;
               return(<div key={day} onClick={()=>{setPd(day);setPm(m);}} style={{minHeight:isWE?38:58,padding:"3px",borderRight:"1px solid "+T.surface,borderBottom:"1px solid "+T.surface,cursor:evs.length?"pointer":"default",background:isSel?T.teal100:isT?T.amber100:T.card}}>
-                <div style={{fontSize:11,fontWeight:700,color:isT?T.amber600:isWE?T.ink300:T.ink700,width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isT?"#fbbf24":"transparent"}}>{day}</div>
-                {!isWE&&evs.slice(0,2).map((ev,ei)=><div key={ei} style={{background:ev.c,color:"#fff",borderRadius:4,padding:"1px 4px",fontSize:10,fontWeight:700,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:2}}>{ev.l} {ev.pj}</div>)}
-                {!isWE&&evs.length>2&&<div style={{fontSize:10,color:T.ink300,fontWeight:600}}>+{evs.length-2}</div>}
+                <div style={{fontSize:14,fontWeight:700,color:isT?T.amber600:isWE?T.ink300:T.ink700,width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:isT?"#fbbf24":"transparent"}}>{day}</div>
+                {!isWE&&evs.slice(0,2).map((ev,ei)=><div key={ei} style={{background:ev.c,color:"#fff",borderRadius:4,padding:"1px 4px",fontSize:13,fontWeight:700,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:2}}>{ev.l} {ev.pj}</div>)}
+                {!isWE&&evs.length>2&&<div style={{fontSize:13,color:T.ink300,fontWeight:600}}>+{evs.length-2}</div>}
                 {isWE&&evs.length>0&&<div style={{width:6,height:6,borderRadius:"50%",background:T.amber500,margin:"3px auto"}}/>}
               </div>);
             })}
@@ -387,17 +503,17 @@ function CalendarView({data}){
       })}
     </div>
     {popup.length>0&&<div style={{margin:16,background:T.teal100,borderRadius:12,padding:14,border:"1px solid "+T.teal400}}>
-      <div style={{fontWeight:700,color:T.navy800,marginBottom:8,fontSize:14}}>{pd} {MONTHS_FULL[pm]} — {popup.length} événement{popup.length>1?"s":""}</div>
+      <div style={{fontWeight:700,color:T.navy800,marginBottom:8,fontSize:17}}>{pd} {MONTHS_FULL[pm]} — {popup.length} événement{popup.length>1?"s":""}</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {popup.map((ev,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 11px",background:T.card,borderRadius:8,border:"1px solid "+T.teal400,boxShadow:T.shadowSm}}>
-          <span style={{background:ev.c,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:11,fontWeight:700}}>{ev.l}</span>
-          <span style={{fontWeight:700,color:T.teal600,fontSize:13}}>{ev.pj}</span>
+          <span style={{background:ev.c,color:"#fff",borderRadius:5,padding:"2px 7px",fontSize:14,fontWeight:700}}>{ev.l}</span>
+          <span style={{fontWeight:700,color:T.teal600,fontSize:16}}>{ev.pj}</span>
           <Badge etat={ev.etat}/>
         </div>)}
       </div>
     </div>}
     <div style={{padding:"9px 16px",borderTop:"1px solid "+T.line,display:"flex",gap:12,background:T.surface,flexWrap:"wrap"}}>
-      {CAL_EV.map(ev=><span key={ev.k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><span style={{background:ev.c,color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:700}}>{ev.l}</span><span style={{color:T.ink500,fontWeight:500}}>{ev.k==="arrivee"?"Arrivée":ev.k==="tests"?"Tests":ev.k==="finProd"?"Fin prod":"Départ"}</span></span>)}
+      {CAL_EV.map(ev=><span key={ev.k} style={{display:"flex",alignItems:"center",gap:5,fontSize:15}}><span style={{background:ev.c,color:"#fff",borderRadius:4,padding:"1px 6px",fontSize:13,fontWeight:700}}>{ev.l}</span><span style={{color:T.ink500,fontWeight:500}}>{ev.k==="arrivee"?"Arrivée":ev.k==="tests"?"Tests":ev.k==="finProd"?"Fin prod":"Départ"}</span></span>)}
     </div>
   </div>);
 }
@@ -407,14 +523,14 @@ function PinGate({onUnlock}){
   const [v,setV]=useState("");const [err,setErr]=useState(false);
   const check=()=>{if(v===PIN)onUnlock();else{setErr(true);setV("");setTimeout(()=>setErr(false),1200);}};
   return(<div style={{background:T.card,borderRadius:16,padding:36,maxWidth:300,margin:"40px auto",boxShadow:T.shadowLg,textAlign:"center",fontFamily:T.font}}>
-    <div style={{fontSize:34,marginBottom:10}}>🔒</div>
-    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:18,color:T.navy800,marginBottom:18}}>Accès Manager</div>
+    <div style={{fontSize:38,marginBottom:10}}>🔒</div>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:22,color:T.navy800,marginBottom:18}}>Accès Manager</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,maxWidth:190,margin:"0 auto 14px"}}>
-      {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i)=><button key={i} onClick={()=>{if(k==="⌫")setV(x=>x.slice(0,-1));else if(k!=="")setV(x=>x.length<4?x+k:x);}} style={{height:46,borderRadius:10,border:"1px solid "+T.line,background:k===""?"transparent":T.surface,fontSize:17,fontWeight:600,cursor:k===""?"default":"pointer",color:T.ink900}}>{k}</button>)}
+      {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i)=><button key={i} onClick={()=>{if(k==="⌫")setV(x=>x.slice(0,-1));else if(k!=="")setV(x=>x.length<4?x+k:x);}} style={{height:46,borderRadius:10,border:"1px solid "+T.line,background:k===""?"transparent":T.surface,fontSize:21,fontWeight:600,cursor:k===""?"default":"pointer",color:T.ink900}}>{k}</button>)}
     </div>
     <div style={{display:"flex",gap:7,justifyContent:"center",marginBottom:12}}>{[0,1,2,3].map(i=><div key={i} style={{width:11,height:11,borderRadius:"50%",background:i<v.length?T.teal500:T.ink100}}/>)}</div>
-    {err&&<div style={{color:T.red500,fontSize:13,marginBottom:8,fontWeight:600}}>Code incorrect</div>}
-    <button onClick={check} disabled={v.length<4} style={{padding:"10px 30px",background:v.length<4?T.ink100:T.teal500,color:v.length<4?T.ink300:"#fff",border:"none",borderRadius:10,fontWeight:700,fontSize:14,cursor:v.length<4?"default":"pointer"}}>Valider</button>
+    {err&&<div style={{color:T.red500,fontSize:16,marginBottom:8,fontWeight:600}}>Code incorrect</div>}
+    <button onClick={check} disabled={v.length<4} style={{padding:"10px 30px",background:v.length<4?T.ink100:T.teal500,color:v.length<4?T.ink300:"#fff",border:"none",borderRadius:10,fontWeight:700,fontSize:17,cursor:v.length<4?"default":"pointer"}}>Valider</button>
   </div>);
 }
 
@@ -454,8 +570,8 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
         <DropFilter label="Statut" options={ALL_ETATS} selected={fEtat} onChange={setFEtat} getLabel={o=>ETAT_META[o]?.label||o}/>
         <DropFilter label="Gamme" options={ALL_GAMMES} selected={fGamme} onChange={setFGamme}/>
-        <button onClick={()=>{setFEtat(new Set(ALL_ETATS));setFGamme(new Set(ALL_GAMMES));}} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:13,cursor:"pointer",color:T.red500,fontWeight:600}}>✕ Effacer</button>
-        <span style={{fontSize:13,color:T.ink500,alignSelf:"center",fontWeight:500}}>{fd.length} unités</span>
+        <button onClick={()=>{setFEtat(new Set(ALL_ETATS));setFGamme(new Set(ALL_GAMMES));}} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:16,cursor:"pointer",color:T.red500,fontWeight:600}}>✕ Effacer</button>
+        <span style={{fontSize:16,color:T.ink500,alignSelf:"center",fontWeight:500}}>{fd.length} unités</span>
         <div style={{marginLeft:"auto"}}>
           <ImportButton
             onImport={onInitialImport}
@@ -471,18 +587,18 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
           />
         </div>
       </div>
-      {initialData.length>0&&<div style={{fontSize:12,color:T.teal600,marginTop:9,fontWeight:600}}>📌 Planning initial figé · {initialData.length} unités{lastInitialImport?" · importé le "+lastInitialImport:""}</div>}
-      {initialData.length===0&&<div style={{fontSize:12,color:T.amber600,marginTop:9,fontWeight:600}}>⚠️ Aucun planning initial importé — les dérives ne peuvent pas être calculées.</div>}
+      {initialData.length>0&&<div style={{fontSize:15,color:T.teal600,marginTop:9,fontWeight:600}}>📌 Planning initial figé · {initialData.length} unités{lastInitialImport?" · importé le "+lastInitialImport:""}</div>}
+      {initialData.length===0&&<div style={{fontSize:15,color:T.amber600,marginTop:9,fontWeight:600}}>⚠️ Aucun planning initial importé — les dérives ne peuvent pas être calculées.</div>}
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      {[["derives","📈 KPIs & Dérives"],["avancement","🔧 Avancement"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"9px 18px",borderRadius:10,border:"none",background:tab===id?T.teal500:T.card,color:tab===id?"#fff":T.ink700,fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:tab===id?T.shadowSm:"none"}}>{l}</button>)}
+      {[["derives","📈 KPIs & Dérives"],["avancement","🔧 Avancement"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"9px 18px",borderRadius:10,border:"none",background:tab===id?T.teal500:T.card,color:tab===id?"#fff":T.ink700,fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:tab===id?T.shadowSm:"none"}}>{l}</button>)}
     </div>
     {tab==="derives"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
         {[[fd.length,"Total",T.teal500],[shipped.length,"Expédiées",T.emerald500],[inProd.length,"En production",T.amber500],[upcoming.length,"Départs < 30j",T.red500]].map(([v,l,c])=>(
           <div key={l} style={{background:T.card,borderRadius:12,padding:"14px 16px",borderTop:"3px solid "+c,boxShadow:T.shadowMd}}>
-            <div style={{fontFamily:T.fontDisplay,fontSize:32,fontWeight:700,color:T.navy800}}>{v}</div>
-            <div style={{fontSize:12,fontWeight:600,color:T.ink500,marginTop:3}}>{l}</div>
+            <div style={{fontFamily:T.fontDisplay,fontSize:36,fontWeight:700,color:T.navy800}}>{v}</div>
+            <div style={{fontSize:15,fontWeight:600,color:T.ink500,marginTop:3}}>{l}</div>
           </div>
         ))}
       </div>
@@ -491,37 +607,37 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
           {[[avgDelay==null?"—":(avgDelay>0?"+":"")+avgDelay+"j","Retard moyen départ",avgDelay>0?T.red500:T.emerald500],[lateCount,"PJ en retard",T.red500],[onTimeOrEarlyCount,"PJ à l'heure / en avance",T.emerald500],[comparable.length,"PJ comparables",T.ink500]].map(([v,l,c])=>(
             <div key={l} style={{background:T.card,borderRadius:12,padding:"14px 16px",borderTop:"3px solid "+c,boxShadow:T.shadowMd}}>
-              <div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:T.navy800}}>{v}</div>
-              <div style={{fontSize:12,fontWeight:600,color:T.ink500,marginTop:3}}>{l}</div>
+              <div style={{fontFamily:T.fontDisplay,fontSize:30,fontWeight:700,color:T.navy800}}>{v}</div>
+              <div style={{fontSize:15,fontWeight:600,color:T.ink500,marginTop:3}}>{l}</div>
             </div>
           ))}
         </div>
 
         {worstDrifts.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:15,color:T.navy800,marginBottom:10}}>Top dérives — Départ (vs planning initial)</div>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.navy800,marginBottom:10}}>Top dérives — Départ (vs planning initial)</div>
           {worstDrifts.map(r=>{const d=r.depart.delta;const c=d>0?T.red500:d<0?T.emerald500:T.ink500;return(
             <div key={r.pj} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid "+T.surface}}>
-              <span style={{fontWeight:700,color:T.teal600,fontSize:13,minWidth:100}}>{r.pj}</span>
-              <span style={{color:T.ink300,fontSize:11,minWidth:60}}>{r.gamme}</span>
-              <span style={{fontSize:12,color:T.ink500}}>{fmt(r.depart.ini?new Date(r.depart.ini):null)} → {fmt(r.depart.rev?new Date(r.depart.rev):null)}</span>
-              <span style={{marginLeft:"auto",fontWeight:800,fontSize:14,color:c}}>{d>0?"+":""}{d}j</span>
+              <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:100}}>{r.pj}</span>
+              <span style={{color:T.ink300,fontSize:14,minWidth:60}}>{r.gamme}</span>
+              <span style={{fontSize:15,color:T.ink500}}>{fmt(r.depart.ini?new Date(r.depart.ini):null)} → {fmt(r.depart.rev?new Date(r.depart.rev):null)}</span>
+              <span style={{marginLeft:"auto",fontWeight:800,fontSize:17,color:c}}>{d>0?"+":""}{d}j</span>
             </div>
           );})}
         </div>}
 
         <div style={{background:T.card,borderRadius:12,padding:0,boxShadow:T.shadowMd,overflow:"auto"}}>
-          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:15,color:T.navy800,padding:"16px 16px 0"}}>Détail par PJ — Initial vs Révisé</div>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.navy800,padding:"16px 16px 0"}}>Détail par PJ — Initial vs Révisé</div>
           <table style={{width:"100%",borderCollapse:"collapse",marginTop:10,tableLayout:"auto"}}>
             <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line}}>
-              {["N° PJ","Gamme","Arrivée","Δ","Tests","Δ","Fin prod","Δ","Départ","Δ"].map((h,i)=><th key={i} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:11,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".03em"}}>{h}</th>)}
+              {["N° PJ","Gamme","Arrivée","Δ","Tests","Δ","Fin prod","Δ","Départ","Δ"].map((h,i)=><th key={i} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:14,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".03em"}}>{h}</th>)}
             </tr></thead>
             <tbody>{driftRows.map((r,i)=>(
               <tr key={i} style={{borderBottom:"1px solid "+T.surface,background:r.hasInitial?T.card:T.surface}}>
-                <td style={{padding:"9px 12px",fontWeight:700,color:T.teal600,fontSize:13,whiteSpace:"nowrap"}}>{r.pj}</td>
-                <td style={{padding:"9px 12px",color:T.ink500,fontSize:12,whiteSpace:"nowrap"}}>{r.gamme}</td>
+                <td style={{padding:"9px 12px",fontWeight:700,color:T.teal600,fontSize:16,whiteSpace:"nowrap"}}>{r.pj}</td>
+                <td style={{padding:"9px 12px",color:T.ink500,fontSize:15,whiteSpace:"nowrap"}}>{r.gamme}</td>
                 {["arrivee","tests","finProd","depart"].map(k=>{const c=r[k];const d=c.delta;const col=d==null?T.ink300:d>0?T.red500:d<0?T.emerald500:T.ink500;return(<React.Fragment key={k}>
-                  <td style={{padding:"9px 12px",fontSize:12,color:T.ink700,whiteSpace:"nowrap"}}>{c.rev?fmt(new Date(c.rev)):"—"}</td>
-                  <td style={{padding:"9px 12px",fontSize:12,fontWeight:700,color:col,whiteSpace:"nowrap"}}>{d==null?"—":(d>0?"+":"")+d+"j"}</td>
+                  <td style={{padding:"9px 12px",fontSize:15,color:T.ink700,whiteSpace:"nowrap"}}>{c.rev?fmt(new Date(c.rev)):"—"}</td>
+                  <td style={{padding:"9px 12px",fontSize:15,fontWeight:700,color:col,whiteSpace:"nowrap"}}>{d==null?"—":(d>0?"+":"")+d+"j"}</td>
                 </React.Fragment>);})}
               </tr>
             ))}</tbody>
@@ -530,35 +646,35 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
       </>}
 
       <div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:15,color:T.navy800,marginBottom:10}}>Départs par mois</div>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.navy800,marginBottom:10}}>Départs par mois</div>
         <div style={{display:"flex",gap:4,alignItems:"flex-end",height:84}}>
           {byMonth.map((n,i)=>{const iC=i===today.getMonth();return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-            <div style={{fontSize:11,color:T.ink500,fontWeight:600}}>{n||""}</div>
+            <div style={{fontSize:14,color:T.ink500,fontWeight:600}}>{n||""}</div>
             <div style={{width:"100%",height:n?(n/maxBar*60)+"px":"0",minHeight:n?4:0,background:i<today.getMonth()?T.ink100:iC?T.teal500:T.teal400,borderRadius:"3px 3px 0 0"}}/>
-            <div style={{fontSize:10,color:iC?T.teal600:T.ink300,fontWeight:iC?700:500}}>{MONTHS[i]}</div>
+            <div style={{fontSize:13,color:iC?T.teal600:T.ink300,fontWeight:iC?700:500}}>{MONTHS[i]}</div>
           </div>);})}
         </div>
       </div>
       <div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:15,color:T.navy800,marginBottom:10}}>Par gamme</div>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.navy800,marginBottom:10}}>Par gamme</div>
         {Object.entries(gammeCounts).sort((a,b)=>b[1]-a[1]).map(([g,n])=>{const col=GAMME_COLORS[g]||T.ink500;return(<div key={g} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <span style={{width:78,fontSize:12,fontWeight:700,color:col,flexShrink:0}}>{g}</span>
-          <div style={{flex:1,background:T.surfaceAlt,borderRadius:5,height:18,overflow:"hidden",position:"relative"}}><div style={{width:((n/Math.max(fd.length,1))*100)+"%",height:"100%",background:col}}/><span style={{position:"absolute",left:8,top:1,fontSize:11,color:"#fff",fontWeight:700,lineHeight:"16px"}}>{n}</span></div>
+          <span style={{width:78,fontSize:15,fontWeight:700,color:col,flexShrink:0}}>{g}</span>
+          <div style={{flex:1,background:T.surfaceAlt,borderRadius:5,height:18,overflow:"hidden",position:"relative"}}><div style={{width:((n/Math.max(fd.length,1))*100)+"%",height:"100%",background:col}}/><span style={{position:"absolute",left:8,top:1,fontSize:14,color:"#fff",fontWeight:700,lineHeight:"16px"}}>{n}</span></div>
         </div>);})}
       </div>
     </div>}
     {tab==="avancement"&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-      <div style={{fontSize:13,color:T.ink500,marginBottom:14}}>Cliquer sur la barre ou saisir le %</div>
+      <div style={{fontSize:16,color:T.ink500,marginBottom:14}}>Cliquer sur la barre ou saisir le %</div>
       {fd.map(r=>{
         const pv=progress[r.pj]!=null?progress[r.pj]:r.etat==="SHIPPED"?100:0;
         return(<div key={r.pj} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid "+T.surface}}>
-          <span style={{fontWeight:700,color:T.teal600,fontSize:13,minWidth:110,flexShrink:0}}>{r.pj}</span>
-          <span style={{color:T.ink300,fontSize:11,minWidth:60,flexShrink:0}}>{r.gamme}</span>
+          <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:110,flexShrink:0}}>{r.pj}</span>
+          <span style={{color:T.ink300,fontSize:14,minWidth:60,flexShrink:0}}>{r.gamme}</span>
           <div style={{flex:1,background:T.surfaceAlt,borderRadius:9,height:13,overflow:"hidden",cursor:"pointer"}} onClick={e=>{const rect=e.currentTarget.getBoundingClientRect();const nv=Math.max(0,Math.min(100,Math.round(((e.clientX-rect.left)/rect.width)*100)));setProgress(p=>({...p,[r.pj]:nv}));}}>
             <div style={{width:pv+"%",height:"100%",background:pv>=100?T.emerald500:pv>=50?T.teal500:T.amber500,borderRadius:9}}/>
           </div>
-          <input type="number" min={0} max={100} value={pv} onChange={e=>setProgress(p=>({...p,[r.pj]:Math.max(0,Math.min(100,+e.target.value||0))}))} style={{width:54,padding:"5px 6px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontWeight:700,textAlign:"center",fontFamily:T.font}}/>
-          <span style={{fontSize:12,color:T.ink500,fontWeight:500}}>%</span>
+          <input type="number" min={0} max={100} value={pv} onChange={e=>setProgress(p=>({...p,[r.pj]:Math.max(0,Math.min(100,+e.target.value||0))}))} style={{width:54,padding:"5px 6px",borderRadius:7,border:"1px solid "+T.line,fontSize:16,fontWeight:700,textAlign:"center",fontFamily:T.font}}/>
+          <span style={{fontSize:15,color:T.ink500,fontWeight:500}}>%</span>
         </div>);
       })}
     </div>}
@@ -606,23 +722,23 @@ function ImportButton({onImport, busy, label, icon, accent, helpText, warnText, 
   };
 
   return(<div style={{position:"relative",fontFamily:T.font}}>
-    <button onClick={()=>setOpen(v=>!v)} disabled={busy} style={{padding:"9px 17px",borderRadius:10,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:13,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:7,boxShadow:T.shadowSm}}>
+    <button onClick={()=>setOpen(v=>!v)} disabled={busy} style={{padding:"9px 17px",borderRadius:10,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:16,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:7,boxShadow:T.shadowSm}}>
       {busy?"⏳ Mise à jour...":btnIcon+" "+btnLabel}
     </button>
     {open&&!busy&&<div style={{position:"absolute",top:"calc(100% + 8px)",right:0,background:T.card,borderRadius:14,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,width:320,padding:18}}>
-      <div style={{fontWeight:700,fontSize:15,color:T.navy800,marginBottom:8}}>{btnLabel}</div>
-      <div style={{fontSize:12,color:T.ink500,marginBottom:14,lineHeight:1.6}}>
+      <div style={{fontWeight:700,fontSize:19,color:T.navy800,marginBottom:8}}>{btnLabel}</div>
+      <div style={{fontSize:15,color:T.ink500,marginBottom:14,lineHeight:1.6}}>
         {helpText||(<>Export Excel (.xlsx) avec colonnes <b>Nom, Début, Niveau hiérarchique</b>.<br/>Niveau 1 = PJ · Niveau 2 = Arrivée / Tests / Fin de production / Départ.</>)}
       </div>
       <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
         style={{border:"2px dashed "+T.ink100,borderRadius:11,padding:"24px 16px",background:T.surface,textAlign:"center",cursor:"pointer",marginBottom:12}}
         onClick={()=>document.getElementById(fileInputId).click()}>
-        <div style={{fontSize:26,marginBottom:6}}>⬆️</div>
-        <div style={{fontSize:12,color:T.ink700,fontWeight:500}}>Glisser-déposer ou cliquer</div>
+        <div style={{fontSize:30,marginBottom:6}}>⬆️</div>
+        <div style={{fontSize:15,color:T.ink700,fontWeight:500}}>Glisser-déposer ou cliquer</div>
         <input id={fileInputId} type="file" accept=".xlsx,.xls,.txt,.tsv" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)handleFile(f);}}/>
       </div>
-      {err&&<div style={{color:T.red500,fontSize:12,background:T.red100,padding:"8px 12px",borderRadius:8,marginBottom:10,fontWeight:500}}>{err}</div>}
-      <div style={{fontSize:11,color:T.ink300,lineHeight:1.5}}>{warnText||"⚠️ Remplace les données pour tous les visiteurs du site."}</div>
+      {err&&<div style={{color:T.red500,fontSize:15,background:T.red100,padding:"8px 12px",borderRadius:8,marginBottom:10,fontWeight:500}}>{err}</div>}
+      <div style={{fontSize:14,color:T.ink300,lineHeight:1.5}}>{warnText||"⚠️ Remplace les données pour tous les visiteurs du site."}</div>
     </div>}
   </div>);
 }
@@ -715,16 +831,16 @@ export default function App(){
     return true;
   }),[data,selEtats,selGammes,selMois,selPJs,allPJs]);
 
-  const VIEWS=[{id:"table",l:"📋 Liste"},{id:"gantt",l:"📊 Gantt"},{id:"calendar",l:"📅 Calendrier"},{id:"manager",l:"🔒 Manager"}];
+  const VIEWS=[{id:"table",l:"📋 Liste"},{id:"gantt",l:"📊 Gantt"},{id:"calendar",l:"📅 Calendrier"}];
 
-  return(<div style={{fontFamily:T.font,fontSize:14,background:T.surface,minHeight:"100vh",padding:20,color:T.ink900}}>
+  return(<div style={{fontFamily:T.font,fontSize:17,background:T.surface,minHeight:"100vh",padding:20,color:T.ink900}}>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"/>
     <div style={{background:T.card,borderRadius:18,padding:"20px 26px",marginBottom:22,color:T.ink900,display:"flex",alignItems:"center",gap:18,flexWrap:"wrap",boxShadow:T.shadowMd,borderBottom:"3px solid "+T.teal500}}>
-      <img src={LOGO_B64} alt="ENOGIA" style={{height:42,objectFit:"contain"}}/>
+      <img src={LOGO_B64} alt="ENOGIA" style={{height:64,objectFit:"contain"}}/>
       <div style={{borderLeft:"1px solid "+T.line,paddingLeft:18}}>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:21,letterSpacing:"-.01em",color:T.navy900}}>Planning Ordonnancement</div>
-        <div style={{color:T.ink500,fontSize:13,marginTop:3,fontWeight:500}}>{loading?"Chargement...":data.length+" unités"+(lastImport?" · Import "+lastImport:" · Aucune donnée importée")}</div>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:25,letterSpacing:"-.01em",color:T.navy900}}>Planning Ordonnancement</div>
+        <div style={{color:T.ink500,fontSize:16,marginTop:3,fontWeight:500}}>{loading?"Chargement...":data.length+" unités"+(lastImport?" · Import "+lastImport:" · Aucune donnée importée")}</div>
       </div>
       <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
         <ImportButton
@@ -734,30 +850,31 @@ export default function App(){
           confirmMessage={"Un planning révisé a déjà été importé"+(lastImport?(" le "+lastImport):"")+" ("+data.length+" unités).\n\nCet import va remplacer les données pour tous les visiteurs du site.\n\nÊtes-vous sûr de vouloir continuer ?"}
         />
         <div style={{display:"flex",alignItems:"center",gap:7}}>
-          <span style={{fontSize:13,color:T.ink500,fontWeight:500}}>Dates :</span>
-          {[["date","JJ/MM"],["semaine","SXX"],["mois","Mois"]].map(([k,l])=><button key={k} onClick={()=>setDf(k)} style={{padding:"6px 13px",borderRadius:9,border:"1px solid "+(df===k?T.teal500:T.line),background:df===k?T.teal500:T.card,color:df===k?"#fff":T.ink700,fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
+          <span style={{fontSize:16,color:T.ink500,fontWeight:500}}>Dates :</span>
+          {[["date","JJ/MM"],["semaine","SXX"],["mois","Mois"]].map(([k,l])=><button key={k} onClick={()=>setDf(k)} style={{padding:"6px 13px",borderRadius:9,border:"1px solid "+(df===k?T.teal500:T.line),background:df===k?T.teal500:T.card,color:df===k?"#fff":T.ink700,fontSize:16,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
         </div>
       </div>
     </div>
 
-    {loading?<div style={{textAlign:"center",padding:70,color:T.ink500,fontSize:15}}>⏳ Connexion à la base de données...</div>:
+    {loading?<div style={{textAlign:"center",padding:70,color:T.ink500,fontSize:19}}>⏳ Connexion à la base de données...</div>:
     data.length===0?(
       <div style={{background:T.card,borderRadius:16,padding:50,textAlign:"center",boxShadow:T.shadowMd}}>
-        <div style={{fontSize:42,marginBottom:14}}>📭</div>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:700,color:T.navy800,marginBottom:8,fontSize:18}}>Aucune donnée importée</div>
-        <div style={{color:T.ink500,fontSize:14,marginBottom:16}}>Utilisez le bouton "Importer un planning MS Project" en haut de page pour charger les données.</div>
+        <div style={{fontSize:46,marginBottom:14}}>📭</div>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,color:T.navy800,marginBottom:8,fontSize:22}}>Aucune donnée importée</div>
+        <div style={{color:T.ink500,fontSize:17,marginBottom:16}}>Utilisez le bouton "Importer un planning MS Project" en haut de page pour charger les données.</div>
       </div>
     ):(
       <>
-        <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
-          {VIEWS.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{padding:"9px 18px",borderRadius:11,border:"none",cursor:"pointer",fontSize:14,fontWeight:700,background:view===v.id?(v.id==="manager"?T.navy800:T.teal500):T.card,color:view===v.id?"#fff":T.ink700,boxShadow:view===v.id?T.shadowSm:"none",transition:"all .12s"}}>{v.l}</button>)}
+        <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
+          {VIEWS.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{padding:"11px 22px",borderRadius:12,border:"none",cursor:"pointer",fontSize:19,fontWeight:700,background:view===v.id?T.teal500:T.card,color:view===v.id?"#fff":T.ink700,boxShadow:view===v.id?T.shadowSm:"none",transition:"all .12s"}}>{v.l}</button>)}
+          <button onClick={()=>setView("manager")} style={{marginLeft:"auto",padding:"11px 22px",borderRadius:12,border:"none",cursor:"pointer",fontSize:19,fontWeight:700,background:view==="manager"?T.navy800:T.card,color:view==="manager"?"#fff":T.ink700,boxShadow:view==="manager"?T.shadowSm:"none",transition:"all .12s"}}>🔒 Manager</button>
         </div>
 
         {view==="manager"?(pinOk?
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <span style={{fontFamily:T.fontDisplay,fontWeight:700,color:T.navy800,fontSize:17}}>🔓 Espace Manager</span>
-              <button onClick={()=>setPinOk(false)} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:12,cursor:"pointer",color:T.ink700,fontWeight:600}}>Verrouiller</button>
+              <span style={{fontFamily:T.fontDisplay,fontWeight:700,color:T.navy800,fontSize:21}}>🔓 Espace Manager</span>
+              <button onClick={()=>setPinOk(false)} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:15,cursor:"pointer",color:T.ink700,fontWeight:600}}>Verrouiller</button>
             </div>
             <ManagerPanel data={data} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}/>
           </div>
@@ -766,16 +883,16 @@ export default function App(){
           <>
             <div style={{background:T.card,borderRadius:14,padding:"12px 16px",marginBottom:16,boxShadow:T.shadowMd}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showF?12:0}}>
-                <span style={{color:T.ink500,fontSize:13,fontWeight:500}}>{filtered.length} résultat(s) sur {data.length}</span>
-                <button onClick={()=>setShowF(f=>!f)} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.line,background:T.surface,fontSize:13,cursor:"pointer",color:T.ink700,fontWeight:600}}>{showF?"▲":"▼"} Filtres</button>
+                <span style={{color:T.ink500,fontSize:16,fontWeight:500}}>{filtered.length} résultat(s) sur {data.length}</span>
+                <button onClick={()=>setShowF(f=>!f)} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.line,background:T.surface,fontSize:16,cursor:"pointer",color:T.ink700,fontWeight:600}}>{showF?"▲":"▼"} Filtres</button>
               </div>
               {showF&&<div style={{display:"flex",gap:8,flexWrap:"wrap",paddingTop:12,borderTop:"1px solid "+T.line}}>
                 <DropFilter label="État" options={ALL_ETATS} selected={selEtats} onChange={setSelEtats} getLabel={o=>ETAT_META[o]?.label||o}/>
                 <DropFilter label="Gamme" options={ALL_GAMMES} selected={selGammes} onChange={setSelGammes}/>
                 <DropFilter label="Mois" options={MONTHS} selected={selMois} onChange={setSelMois}/>
                 <DropFilter label="N° PJ" options={allPJs} selected={selPJs.size>0?selPJs:new Set(allPJs)} onChange={s=>setSelPJs(s)}/>
-                <button onClick={()=>{setSelEtats(new Set(ALL_ETATS));setSelGammes(new Set(ALL_GAMMES));setSelMois(new Set(MONTHS));setSelPJs(new Set(allPJs));}} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:13,cursor:"pointer",color:T.red500,fontWeight:600}}>✕ Réinitialiser</button>
-                <button onClick={()=>setSelEtats(new Set(ALL_ETATS.filter(e=>e!=="SHIPPED")))} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:13,cursor:"pointer",color:T.ink700,fontWeight:600}}>Masquer expédiées</button>
+                <button onClick={()=>{setSelEtats(new Set(ALL_ETATS));setSelGammes(new Set(ALL_GAMMES));setSelMois(new Set(MONTHS));setSelPJs(new Set(allPJs));}} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:16,cursor:"pointer",color:T.red500,fontWeight:600}}>✕ Réinitialiser</button>
+                <button onClick={()=>setSelEtats(new Set(ALL_ETATS.filter(e=>e!=="SHIPPED")))} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:16,cursor:"pointer",color:T.ink700,fontWeight:600}}>Masquer expédiées</button>
               </div>}
             </div>
             {view==="table"&&<TableView data={filtered} progress={progress} df={df}/>}

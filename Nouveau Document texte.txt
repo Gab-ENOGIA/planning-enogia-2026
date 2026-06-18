@@ -1,2 +1,8 @@
 cd Desktop\planning-enogia-2026
+
+npm start
+
+git add .
+git commit -m "Ajout planning initial et calcul des dérives"
+git push
 npm run deploy
