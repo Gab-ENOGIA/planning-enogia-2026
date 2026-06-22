@@ -103,6 +103,7 @@ const ETAT_META={
   "SHIPPED":{bg:T.emerald100,text:T.emerald600,border:"#8fdcb8",bar:T.emerald500,label:"Expédiée"},
   "PROD":{bg:T.teal100,text:T.teal600,border:"#9bdce8",bar:T.teal500,label:"Production ENOGIA"},
   "En fabrication":{bg:"#fde9d2",text:"#c2630a",border:"#f5c690",bar:"#e8821a",label:"Fabrication FNR"},
+  "STOCKAGE_EXT":{bg:"#e2e8f0",text:"#475569",border:"#cbd5e1",bar:"#64748b",label:"Stockage Externe"},
   "NOT ORDERED":{bg:"#fde4e1",text:"#c0392b",border:"#f4b8b1",bar:"#e8736a",label:"Non commandée"},
   "A_DEFINIR":{bg:T.surfaceAlt,text:T.ink500,border:T.ink100,bar:T.ink300,label:"À définir"}
 };
@@ -281,7 +282,10 @@ function GanttView({data,progress,df}){
   const yearStart=new Date(year,0,1);
   const yearEnd=new Date(year,11,31);
   const totalDays=Math.round((yearEnd-yearStart)/86400000)+1;
-  const dayW=26; // px par jour — base du zoom
+  const [dayW,setDayW]=useState(26); // px par jour — ajustable via le zoom
+  const ZOOM_LEVELS=[10,14,18,26,36,50];
+  const zoomOut=()=>setDayW(w=>{const i=ZOOM_LEVELS.indexOf(w);return ZOOM_LEVELS[Math.max(0,i-1)]||ZOOM_LEVELS[0];});
+  const zoomIn=()=>setDayW(w=>{const i=ZOOM_LEVELS.indexOf(w);return ZOOM_LEVELS[Math.min(ZOOM_LEVELS.length-1,i+1)]||ZOOM_LEVELS[ZOOM_LEVELS.length-1];});
   const colW=240;
   const rowH=54;
   const [tt,setTt]=useState(null);
@@ -326,7 +330,11 @@ function GanttView({data,progress,df}){
     <div style={{display:"flex",gap:10,padding:"14px 18px",borderBottom:"1px solid "+T.line,alignItems:"center",flexWrap:"wrap",background:T.surface}}>
       <span style={{fontSize:16,fontWeight:700,color:T.navy800}}>Planning {year}</span>
       <span style={{fontSize:15,color:T.ink500}}>Faites glisser ou utilisez la molette pour défiler →</span>
-      <button onClick={()=>scrollToDay(dayOf(today))} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
+      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+        <button onClick={zoomOut} disabled={dayW<=ZOOM_LEVELS[0]} style={{padding:"6px 12px",borderRadius:9,border:"1px solid "+T.line,background:T.card,color:dayW<=ZOOM_LEVELS[0]?T.ink300:T.ink700,fontSize:17,fontWeight:700,cursor:dayW<=ZOOM_LEVELS[0]?"default":"pointer"}}>−</button>
+        <button onClick={zoomIn} disabled={dayW>=ZOOM_LEVELS[ZOOM_LEVELS.length-1]} style={{padding:"6px 12px",borderRadius:9,border:"1px solid "+T.line,background:T.card,color:dayW>=ZOOM_LEVELS[ZOOM_LEVELS.length-1]?T.ink300:T.ink700,fontSize:17,fontWeight:700,cursor:dayW>=ZOOM_LEVELS[ZOOM_LEVELS.length-1]?"default":"pointer"}}>+</button>
+      </div>
+      <button onClick={()=>scrollToDay(dayOf(today))} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
     </div>
 
     <div ref={topScrollRef} onScroll={syncFromTop} style={{overflowX:"auto",overflowY:"hidden",height:16}}>
@@ -445,16 +453,18 @@ function ProjectModal({pj,data,df,onClose}){
         <button onClick={onClose} style={{background:T.surface,border:"none",borderRadius:9,width:36,height:36,fontSize:18,cursor:"pointer",color:T.ink700,flexShrink:0}}>✕</button>
       </div>
 
-      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
         <Badge etat={r.etat}/>
         <span style={{fontSize:15,color:T.ink500,alignSelf:"center"}}>{r.gamme}</span>
+        {r.clientPresence?.present&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:14,background:T.violet100,color:T.violet600,borderRadius:7,padding:"4px 10px",fontWeight:700}}>👤 Client/NOBO présent{r.clientPresence.date?" — "+fmt(new Date(r.clientPresence.date)):""}</span>}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:24}}>
-        {PHASES.map(ph=>{const d=r[ph.k]?new Date(r[ph.k]):null;return(
-          <div key={ph.k} style={{background:T.surface,borderRadius:10,padding:"11px 14px",borderTop:"3px solid "+ph.c}}>
+        {PHASES.map(ph=>{const d=r[ph.k]?new Date(r[ph.k]):null;const showPresence=ph.k==="tests"&&r.clientPresence?.present;return(
+          <div key={ph.k} style={{background:T.surface,borderRadius:10,padding:"11px 14px",borderTop:"3px solid "+ph.c,position:"relative"}}>
             <div style={{color:T.ink500,fontSize:13,fontWeight:600,textTransform:"uppercase",letterSpacing:".03em"}}>{ph.t}</div>
             <div style={{fontWeight:700,color:T.navy800,fontSize:19,marginTop:3}}>{d?fmtMode(d,df):"—"}</div>
+            {showPresence&&<span title="Client/NOBO présent" style={{position:"absolute",top:-8,right:-8,fontSize:15,background:T.violet100,border:"1.5px solid "+T.violet600,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center"}}>👤</span>}
           </div>
         );})}
       </div>
@@ -591,10 +601,10 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
         {show("avancement")&&<col style={{width:cw("avancement")}}/>}
       </colgroup>
       <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line}}>
-        <th style={thBase}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs.size>0?selPJs:new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths}/></th>
-        {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets.size>0?selProjets:new Set(allProjets)} onChange={setSelProjets}/>}<ResizeHandle colId="projet" nextColId={nextVisible("projet")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
-        {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays.size>0?selPays:new Set(allPays)} onChange={setSelPays}/>}<ResizeHandle colId="pays" nextColId={nextVisible("pays")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
-        {show("chef")&&<th style={thBase}>Chef de Projet {allChefs&&<DropFilter label="" icon options={allChefs} selected={selChefs.size>0?selChefs:new Set(allChefs)} onChange={setSelChefs} getLabel={o=>initials(o)+" — "+o}/>}<ResizeHandle colId="chef" nextColId={nextVisible("chef")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        <th style={thBase}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs||new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths}/></th>
+        {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets||new Set(allProjets)} onChange={setSelProjets}/>}<ResizeHandle colId="projet" nextColId={nextVisible("projet")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays||new Set(allPays)} onChange={setSelPays}/>}<ResizeHandle colId="pays" nextColId={nextVisible("pays")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("chef")&&<th style={thBase}>Chef de Projet {allChefs&&<DropFilter label="" icon options={allChefs} selected={selChefs||new Set(allChefs)} onChange={setSelChefs} getLabel={o=>initials(o)+" — "+o}/>}<ResizeHandle colId="chef" nextColId={nextVisible("chef")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
         {show("gamme")&&<th style={thBase}>Gamme {setSelGammes&&<DropFilter label="" icon options={ALL_GAMMES} selected={selGammes} onChange={setSelGammes}/>}<ResizeHandle colId="gamme" nextColId={nextVisible("gamme")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
         {show("etat")&&<th style={thBase}>État {setSelEtats&&<DropFilter label="" icon options={ALL_ETATS} selected={selEtats} onChange={setSelEtats} getLabel={o=>ETAT_META[o]?.label||o}/>}<ResizeHandle colId="etat" nextColId={nextVisible("etat")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
         {show("arrivee")&&<th style={thBase}>Arrivée {setSelMoisArrivee&&<DropFilter label="" icon options={MONTHS} selected={selMoisArrivee} onChange={setSelMoisArrivee}/>}<ResizeHandle colId="arrivee" nextColId={nextVisible("arrivee")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
@@ -617,7 +627,10 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
           {show("gamme")&&<td style={{padding:"13px 16px",color:T.ink500,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.gamme}</td>}
           {show("etat")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap",overflow:"hidden"}}><Badge etat={r.etat}/></td>}
           {show("arrivee")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
-          {show("tests")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}</td>}
+          {show("tests")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}
+            {r.clientPresence?.present&&<span title={"Client/NOBO présent"+(r.clientPresence.date?" le "+r.clientPresence.date:"")} style={{marginLeft:7,fontSize:13,background:T.violet100,color:T.violet600,borderRadius:5,padding:"2px 6px",fontWeight:700}}>👤{r.clientPresence.date?" "+fmt(new Date(r.clientPresence.date)):""}</span>}
+          </td>}
           {show("finprod")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
           {show("depart")&&<td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
           {show("avancement")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap",overflow:"hidden"}}>
@@ -676,20 +689,24 @@ function weekStartOf(d){const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate
 
 function getDayStatus(r,day){
   const dayEnd=new Date(day);dayEnd.setDate(dayEnd.getDate()+1);
-  return getWeekStatus(r,day,dayEnd);
+  const status=getWeekStatus(r,day,dayEnd);
+  if(!status)return null;
+  const isWeekend=day.getDay()===0||day.getDay()===6;
+  if(!isWeekend)return status;
+  // Le week-end : pas de Production ni de Tests (l'atelier et les automaticiens ne travaillent pas), mais les jalons ponctuels restent affichés
+  const milestones=status.split(" + ").filter(m=>m!=="Production"&&m!=="Tests");
+  return milestones.length?milestones.join(" + "):null;
 }
-function CalendarView({data,onSelectPj}){
+function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor}){
   const rowH=54;
+  const [zoomLevel,setZoomLevel]=useState(1); // 0=zoomé (peu de colonnes, larges), 1=normal, 2=dézoomé (plus de colonnes, étroites)
+  const WEEK_COUNTS=[5,8,14];
+  const DAY_COUNTS=[9,14,21];
+  const nWeeks=WEEK_COUNTS[zoomLevel];
+  const nDays=DAY_COUNTS[zoomLevel];
+  const zoomIn=()=>setZoomLevel(z=>Math.max(0,z-1));
+  const zoomOut=()=>setZoomLevel(z=>Math.min(WEEK_COUNTS.length-1,z+1));
   const pjColors=usePjColors(data);
-  const [mode,setMode]=useState("week"); // "week" | "day"
-  const [nWeeks,setNWeeks]=useState(8);
-  const [nDays,setNDays]=useState(14);
-  const [anchor,setAnchor]=useState(weekStartOf(today));
-  const [dayAnchor,setDayAnchor]=useState(()=>{const d=new Date(today);d.setHours(0,0,0,0);return d;});
-  const scrollRef=React.useRef(null);
-  const topScrollRef=React.useRef(null);
-  const syncFromTop=()=>{if(scrollRef.current&&topScrollRef.current)scrollRef.current.scrollLeft=topScrollRef.current.scrollLeft;};
-  const syncFromBottom=()=>{if(scrollRef.current&&topScrollRef.current)topScrollRef.current.scrollLeft=scrollRef.current.scrollLeft;};
 
   const weeks=useMemo(()=>{
     const out=[];
@@ -715,46 +732,87 @@ function CalendarView({data,onSelectPj}){
   const DAY_NAMES=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 
   const goPrev=()=>{
-    if(mode==="week")setAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()-7*Math.max(1,Math.floor(nWeeks/2)));return n;});
-    else setDayAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()-Math.max(1,Math.floor(nDays/2)));return n;});
+    if(mode==="week")setAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()-7*4);return n;});
+    else setDayAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()-7);return n;});
   };
   const goNext=()=>{
-    if(mode==="week")setAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()+7*Math.max(1,Math.floor(nWeeks/2)));return n;});
-    else setDayAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()+Math.max(1,Math.floor(nDays/2)));return n;});
+    if(mode==="week")setAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()+7*4);return n;});
+    else setDayAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()+7);return n;});
   };
   const goToday=()=>{
     if(mode==="week")setAnchor(weekStartOf(today));
     else{const d=new Date(today);d.setHours(0,0,0,0);setDayAnchor(d);}
   };
 
+  // Déplace la fenêtre affichée d'un nombre de jours donné (positif = vers le futur)
+  const shiftByDays=days=>{
+    if(mode==="week"){
+      const weeksShift=Math.round(days/7);
+      if(weeksShift===0)return;
+      setAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()+weeksShift*7);return n;});
+    }else{
+      const daysShift=Math.round(days);
+      if(daysShift===0)return;
+      setDayAnchor(a=>{const n=new Date(a);n.setDate(n.getDate()+daysShift);return n;});
+    }
+  };
+
+  // Glissement à la souris (clic-glisser) pour naviguer
+  const dragRef=React.useRef({active:false,startX:0,colW:mode==="week"?92:64});
+  const onMouseDownDrag=e=>{
+    dragRef.current={active:true,startX:e.clientX,colW:mode==="week"?92:64};
+  };
+  const onMouseMoveDrag=e=>{
+    if(!dragRef.current.active)return;
+    const dx=e.clientX-dragRef.current.startX;
+    const threshold=dragRef.current.colW; // une colonne entière de déplacement avant de faire avancer la vue
+    if(Math.abs(dx)>=threshold){
+      const unitsShift=mode==="week"?Math.sign(-dx)*7:Math.sign(-dx);
+      shiftByDays(unitsShift);
+      dragRef.current.startX=e.clientX;
+    }
+  };
+  const onMouseUpDrag=()=>{dragRef.current.active=false;};
+
+  // Molette horizontale (ou verticale convertie) pour naviguer
+  const wheelAccum=React.useRef(0);
+  const onWheelNav=e=>{
+    e.preventDefault();
+    const delta=e.deltaX!==0?e.deltaX:e.deltaY;
+    wheelAccum.current+=delta;
+    const step=mode==="week"?92:64;
+    if(Math.abs(wheelAccum.current)>=step){
+      const unitsShift=mode==="week"?Math.sign(wheelAccum.current)*7:Math.sign(wheelAccum.current);
+      shiftByDays(unitsShift);
+      wheelAccum.current=0;
+    }
+  };
+
   return(<div style={{background:T.card,borderRadius:14,overflow:"hidden",boxShadow:T.shadowMd,fontFamily:T.font}}>
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 18px",borderBottom:"1px solid "+T.line,background:T.surface,flexWrap:"wrap"}}>
       <div style={{display:"flex",gap:4,background:T.surfaceAlt,borderRadius:9,padding:3}}>
-        <button onClick={()=>setMode("week")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="week"?T.card:"transparent",color:mode==="week"?T.navy800:T.ink500,fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:mode==="week"?T.shadowSm:"none"}}>Semaine</button>
-        <button onClick={()=>setMode("day")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="day"?T.card:"transparent",color:mode==="day"?T.navy800:T.ink500,fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:mode==="day"?T.shadowSm:"none"}}>Jour</button>
+        <button onClick={()=>setMode("week")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="week"?T.card:"transparent",color:mode==="week"?T.navy800:T.ink500,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:mode==="week"?T.shadowSm:"none"}}>Semaine</button>
+        <button onClick={()=>setMode("day")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="day"?T.card:"transparent",color:mode==="day"?T.navy800:T.ink500,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:mode==="day"?T.shadowSm:"none"}}>Jour</button>
       </div>
-      <button onClick={goPrev} style={{padding:"6px 13px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:15,cursor:"pointer",color:T.ink700}}>◀</button>
-      <span style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:16,color:T.navy800,minWidth:220,textAlign:"center"}}>
+      <button onClick={goPrev} style={{padding:"6px 13px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:17,cursor:"pointer",color:T.ink700}}>◀</button>
+      <span style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:18,color:T.navy800,minWidth:220,textAlign:"center"}}>
         {mode==="week"
           ?"Sem. "+weekNum(weeks[0])+" → "+weekNum(weeks[weeks.length-1])+", "+weeks[0].getFullYear()
           :days[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" → "+days[days.length-1].toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})}
       </span>
-      <button onClick={goNext} style={{padding:"6px 13px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:15,cursor:"pointer",color:T.ink700}}>▶</button>
-      <button onClick={goToday} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:13,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
-      <div style={{marginLeft:"auto",display:"flex",gap:5}}>
-        {mode==="week"
-          ?[4,8,12].map(n=><button key={n} onClick={()=>setNWeeks(n)} style={{padding:"5px 12px",borderRadius:8,border:"none",background:nWeeks===n?T.teal500:T.surfaceAlt,color:nWeeks===n?"#fff":T.ink700,fontSize:13,fontWeight:600,cursor:"pointer"}}>{n} sem.</button>)
-          :[7,14,21].map(n=><button key={n} onClick={()=>setNDays(n)} style={{padding:"5px 12px",borderRadius:8,border:"none",background:nDays===n?T.teal500:T.surfaceAlt,color:nDays===n?"#fff":T.ink700,fontSize:13,fontWeight:600,cursor:"pointer"}}>{n}j</button>)}
+      <button onClick={goNext} style={{padding:"6px 13px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:17,cursor:"pointer",color:T.ink700}}>▶</button>
+      <span style={{fontSize:14,color:T.ink300}}>Glissez ou utilisez la molette pour défiler →</span>
+      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+        <button onClick={zoomOut} disabled={zoomLevel>=WEEK_COUNTS.length-1} style={{padding:"6px 12px",borderRadius:9,border:"1px solid "+T.line,background:T.card,color:zoomLevel>=WEEK_COUNTS.length-1?T.ink300:T.ink700,fontSize:17,fontWeight:700,cursor:zoomLevel>=WEEK_COUNTS.length-1?"default":"pointer"}}>−</button>
+        <button onClick={zoomIn} disabled={zoomLevel<=0} style={{padding:"6px 12px",borderRadius:9,border:"1px solid "+T.line,background:T.card,color:zoomLevel<=0?T.ink300:T.ink700,fontSize:17,fontWeight:700,cursor:zoomLevel<=0?"default":"pointer"}}>+</button>
       </div>
+      <button onClick={goToday} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
     </div>
 
-    <div ref={topScrollRef} onScroll={syncFromTop} style={{overflowX:"auto",overflowY:"hidden",height:16}}>
-      <div style={{width:210+cols.length*(mode==="week"?92:64),height:1}}/>
-    </div>
-
-    <div ref={scrollRef} onScroll={syncFromBottom} style={{overflowX:"auto"}}>
-      <div style={{display:"grid",gridTemplateColumns:"210px repeat("+cols.length+",1fr)",minWidth:210+cols.length*(mode==="week"?92:64)}}>
-        <div style={{padding:"6px 14px",fontSize:11,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}/>
+    <div onMouseDown={onMouseDownDrag} onMouseMove={onMouseMoveDrag} onMouseUp={onMouseUpDrag} onMouseLeave={onMouseUpDrag} onWheel={onWheelNav}
+      style={{overflowX:"auto",cursor:"grab",userSelect:"none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"210px repeat("+cols.length+",minmax("+(mode==="week"?92:64)+"px,1fr))"}}>
+        <div style={{padding:"6px 14px",fontSize:13,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}/>
         {(()=>{
           // Regroupe les colonnes consécutives par mois pour afficher une bande "Mois Année" au-dessus
           const groups=[];
@@ -765,17 +823,17 @@ function CalendarView({data,onSelectPj}){
             else groups.push({m,y,span:1});
           });
           return groups.map((g,gi)=>(
-            <div key={gi} style={{gridColumn:"span "+g.span,padding:"6px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>{MONTHS_FULL[g.m]} {g.y}</div>
+            <div key={gi} style={{gridColumn:"span "+g.span,padding:"6px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>{MONTHS_FULL[g.m]} {g.y}</div>
           ));
         })()}
-        <div style={{padding:"9px 14px",fontSize:12,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}>Machine</div>
+        <div style={{padding:"9px 14px",fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}>Machine</div>
         {mode==="week"?weeks.map((w,wi)=>(
-          <div key={wi} style={{padding:"9px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:wi===todayWeekIdx?T.teal600:T.ink500,background:wi===todayWeekIdx?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>S{weekNum(w)}</div>
+          <div key={wi} style={{padding:"9px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:wi===todayWeekIdx?"#fff":T.ink500,background:wi===todayWeekIdx?T.teal500:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:wi===todayWeekIdx?"inset 0 -3px 0 "+T.navy900:"none"}}>S{weekNum(w)}</div>
         )):days.map((d,di)=>{
           const isWE=d.getDay()===0||d.getDay()===6;
-          return(<div key={di} style={{padding:"6px 2px",textAlign:"center",background:di===todayDayIdx?T.teal100:isWE?T.surfaceAlt:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>
-            <div style={{fontSize:10,fontWeight:600,color:di===todayDayIdx?T.teal600:T.ink300}}>{DAY_NAMES[d.getDay()]}</div>
-            <div style={{fontSize:13,fontWeight:700,color:di===todayDayIdx?T.teal600:T.ink700}}>{d.getDate()}</div>
+          return(<div key={di} style={{padding:"6px 2px",textAlign:"center",background:di===todayDayIdx?T.teal500:isWE?T.surfaceAlt:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:di===todayDayIdx?"inset 0 -3px 0 "+T.navy900:"none"}}>
+            <div style={{fontSize:12,fontWeight:600,color:di===todayDayIdx?"rgba(255,255,255,.85)":T.ink300}}>{DAY_NAMES[d.getDay()]}</div>
+            <div style={{fontSize:15,fontWeight:700,color:di===todayDayIdx?"#fff":T.ink700}}>{d.getDate()}</div>
           </div>);
         })}
 
@@ -787,30 +845,37 @@ function CalendarView({data,onSelectPj}){
             <div onClick={()=>onSelectPj&&onSelectPj(pj)} style={{padding:"6px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:2,height:rowH,borderBottom:"1px solid "+T.surface,borderRight:"1px solid "+T.line,background:T.card,position:"sticky",left:0,cursor:"pointer",overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
-                <span style={{fontSize:14,fontWeight:700,color:T.teal600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj}</span>
+                <span style={{fontSize:16,fontWeight:700,color:T.teal600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj}</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:16,overflow:"hidden"}}>
                 <CountryFlag pays={meta.pays} size={11}/>
-                <span style={{fontSize:12,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.nomProjet}</span>
+                <span style={{fontSize:14,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.nomProjet} <span style={{fontStyle:"italic",fontSize:11,color:T.ink300}}>({r.gamme})</span></span>
               </div>
             </div>
             {mode==="week"?weeks.map((w,wi)=>{
               const we=new Date(w);we.setDate(we.getDate()+7);
               const status=getWeekStatus(r,w,we);
-              if(!status)return<div key={wi} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line}}/>;
+              const isTodayCol=wi===todayWeekIdx;
+              if(!status)return<div key={wi} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:isTodayCol?"rgba(13,155,181,.08)":"transparent"}}/>;
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
-              return(<div key={wi} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer"}}>
-                <div title={status} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?9.5:11,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 4px"}}>{status}</div>
+              const presenceDate=r.clientPresence?.present&&r.clientPresence.date?new Date(r.clientPresence.date):null;
+              const showPresence=presenceDate&&presenceDate>=w&&presenceDate<we;
+              return(<div key={wi} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",position:"relative",background:isTodayCol?"rgba(13,155,181,.08)":"transparent"}}>
+                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?9.5:11,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 4px"}}>{status}</div>
+                {showPresence&&<span style={{position:"absolute",top:-2,right:-2,fontSize:15,background:T.violet100,border:"1.5px solid "+T.violet600,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center"}}>👤</span>}
               </div>);
             }):days.map((d,di)=>{
               const isWE=d.getDay()===0||d.getDay()===6;
               const status=getDayStatus(r,d);
-              if(!status)return<div key={di} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:isWE?T.surfaceAlt:"transparent"}}/>;
+              const isTodayCol=di===todayDayIdx;
+              if(!status)return<div key={di} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:isTodayCol?"rgba(13,155,181,.12)":isWE?T.surfaceAlt:"transparent"}}/>;
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
-              return(<div key={di} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",background:isWE?T.surfaceAlt:"transparent"}}>
-                <div title={status} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?7.5:9,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 2px"}}>{status}</div>
+              const showPresence=r.clientPresence?.present&&r.clientPresence.date&&new Date(r.clientPresence.date).toDateString()===d.toDateString();
+              return(<div key={di} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",background:isTodayCol?"rgba(13,155,181,.12)":isWE?T.surfaceAlt:"transparent",position:"relative"}}>
+                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?7.5:9,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 2px"}}>{status}</div>
+                {showPresence&&<span style={{position:"absolute",top:-2,right:-2,fontSize:13,background:T.violet100,border:"1.5px solid "+T.violet600,borderRadius:"50%",width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center"}}>👤</span>}
               </div>);
             })}
           </React.Fragment>);
@@ -818,13 +883,35 @@ function CalendarView({data,onSelectPj}){
       </div>
     </div>
 
+    {/* mini-frise annuelle de navigation, même esprit que le Gantt */}
+    <div style={{padding:"10px 18px",borderTop:"1px solid "+T.line,background:T.surface}}>
+      <div onClick={e=>{
+        const rect=e.currentTarget.getBoundingClientRect();
+        const ratio=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+        const yearStartCal=new Date(today.getFullYear(),0,1);
+        const targetDay=Math.round(ratio*365);
+        const target=new Date(yearStartCal);target.setDate(target.getDate()+targetDay);
+        if(mode==="week")setAnchor(weekStartOf(target));
+        else{target.setHours(0,0,0,0);setDayAnchor(target);}
+      }}
+        style={{position:"relative",height:22,borderRadius:6,background:T.surfaceAlt,cursor:"pointer",overflow:"hidden"}}>
+        {MONTHS.map((mn,mi)=>{const ms=new Date(today.getFullYear(),mi,1);const yearStartCal=new Date(today.getFullYear(),0,1);const left=((ms-yearStartCal)/86400000/365)*100;return(
+          <div key={mi} style={{position:"absolute",left:left+"%",top:0,bottom:0,width:1,background:T.line}}/>
+        );})}
+        <div style={{position:"absolute",left:((today-new Date(today.getFullYear(),0,1))/86400000/365)*100+"%",top:0,bottom:0,width:2,background:T.red500}}/>
+        {MONTHS.map((mn,mi)=>{const ms=new Date(today.getFullYear(),mi,1);const yearStartCal=new Date(today.getFullYear(),0,1);const left=(((ms-yearStartCal)/86400000+15)/365)*100;return(
+          <span key={mi} style={{position:"absolute",left:left+"%",top:2,fontSize:13,color:T.ink500,fontWeight:600,transform:"translateX(-50%)"}}>{mn}</span>
+        );})}
+      </div>
+    </div>
+
     <div style={{padding:"11px 18px",borderTop:"1px solid "+T.line,display:"flex",gap:16,flexWrap:"wrap",background:T.surface,alignItems:"center"}}>
-      <span style={{fontSize:12,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em"}}>Étapes :</span>
-      {Object.entries(SEGMENT_STYLE).map(([label,st])=><span key={label} style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>
+      <span style={{fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em"}}>Étapes :</span>
+      {Object.entries(SEGMENT_STYLE).map(([label,st])=><span key={label} style={{display:"flex",alignItems:"center",gap:6,fontSize:15}}>
         <span style={{width:14,height:14,borderRadius:4,background:st.c}}/>
         <span style={{color:T.ink700,fontWeight:500}}>{label}</span>
       </span>)}
-      <span style={{fontSize:12,color:T.ink300,marginLeft:"auto"}}>Point coloré = machine · Couleur du segment = étape · Clic = détail</span>
+      <span style={{fontSize:14,color:T.ink300,marginLeft:"auto"}}>Point coloré = machine · Couleur du segment = étape · Clic = détail</span>
     </div>
   </div>);
 }
@@ -845,12 +932,34 @@ function PinGate({onUnlock}){
   </div>);
 }
 
-function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved}){
+// Filtre de période (mois et/ou année) réutilisable sur chaque graphique temporel
+function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMonth=true}){
+  return(<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+    <select value={year||""} onChange={e=>setYear(e.target.value?+e.target.value:null)} style={{padding:"4px 8px",borderRadius:7,border:"1px solid "+T.line,fontSize:12,fontFamily:T.font,color:T.ink700,background:T.card}}>
+      <option value="">Toutes années</option>
+      {yearsAvailable.map(y=><option key={y} value={y}>{y}</option>)}
+    </select>
+    {showMonth&&<select value={month==null?"":month} onChange={e=>setMonth(e.target.value===""?null:+e.target.value)} style={{padding:"4px 8px",borderRadius:7,border:"1px solid "+T.line,fontSize:12,fontFamily:T.font,color:T.ink700,background:T.card}}>
+      <option value="">Tous les mois</option>
+      {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
+    </select>}
+  </div>);
+}
+function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor}){
   const [fEtat,setFEtat]=useState(new Set(ALL_ETATS));
   const [kpiStep,setKpiStep]=useState("depart");
+  const [chargeYear,setChargeYear]=useState(null);
+  const [chargeMonth,setChargeMonth]=useState(null);
+  const [satYear,setSatYear]=useState(null);
+  const [satMonth,setSatMonth]=useState(null);
+  const [driftMoisYear,setDriftMoisYear]=useState(null);
+  const yearsInData=useMemo(()=>{
+    const ys=new Set();
+    data.forEach(r=>["arrivee","tests","finProd","depart"].forEach(k=>{if(r[k])ys.add(new Date(r[k]).getFullYear());}));
+    return [...ys].sort();
+  },[data]);
   const STEP_LABELS={arrivee:"Arrivée",tests:"Tests",finProd:"Fin de production",depart:"Départ"};
   const [fGamme,setFGamme]=useState(new Set(ALL_GAMMES));
-  const [tab,setTab]=useState("derives");
   const fd=useMemo(()=>data.filter(r=>fEtat.has(r.etat)&&fGamme.has(r.gamme)),[data,fEtat,fGamme]);
   const shipped=fd.filter(r=>r.etat==="SHIPPED");
   const inProd=fd.filter(r=>["PROD","En fabrication"].includes(r.etat));
@@ -954,11 +1063,6 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
   },[comparable]);
 
   // ── Tableau détaillé : écart sur les 4 jalons pour chaque PJ comparable ──
-  const detailByPJTable=comparable.map(r=>({
-    pj:r.pj,gamme:r.gamme,
-    dArrivee:r.arrivee.delta,dTests:r.tests.delta,dFinProd:r.finProd.delta,dDepart:r.depart.delta,
-  })).sort((a,b)=>(b.dDepart||0)-(a.dDepart||0));
-
   // ── Axe 1 : dérive moyenne par gamme ──────────────────────────
   const driftByGamme=useMemo(()=>{
     const m={};
@@ -975,12 +1079,14 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
     const m={};
     comparable.forEach(r=>{
       if(r.depart.delta==null||!r.depart.rev)return;
-      const mo=MONTHS[new Date(r.depart.rev).getMonth()];
+      const dt=new Date(r.depart.rev);
+      if(driftMoisYear&&dt.getFullYear()!==driftMoisYear)return;
+      const mo=MONTHS[dt.getMonth()];
       if(!m[mo])m[mo]={sum:0,n:0};
       m[mo].sum+=r.depart.delta;m[mo].n++;
     });
     return MONTHS.filter(mo=>m[mo]).map(mo=>({mois:mo,moyenne:Math.round((m[mo].sum/m[mo].n)*10)/10,n:m[mo].n}));
-  },[comparable]);
+  },[comparable,driftMoisYear]);
 
   // ── Axe 4 : dérive moyenne par jalon (où le retard se creuse) ─
   const driftByMilestone=useMemo(()=>{
@@ -1040,18 +1146,69 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
     const m={};
     MONTHS.forEach(mo=>{m[mo]={mois:mo};steps.forEach(([k,l])=>{m[mo][l]=0;});m[mo]["Production"]=0;});
     fd.forEach(r=>{
-      steps.forEach(([k,l])=>{if(r[k]){const mo=MONTHS[new Date(r[k]).getMonth()];m[mo][l]++;}});
+      steps.forEach(([k,l])=>{if(r[k]){const dt=new Date(r[k]);if(chargeYear&&dt.getFullYear()!==chargeYear)return;const mo=MONTHS[dt.getMonth()];m[mo][l]++;}});
       // Production : la machine est en fabrication ce mois-là si le mois chevauche [arrivée, fin prod]
       if(r.arrivee&&r.finProd){
         const start=new Date(r.arrivee),end=new Date(r.finProd);
+        const targetYear=chargeYear||start.getFullYear();
         MONTHS.forEach((mo,mi)=>{
-          const monthStart=new Date(start.getFullYear(),mi,1),monthEnd=new Date(start.getFullYear(),mi+1,1);
+          const monthStart=new Date(targetYear,mi,1),monthEnd=new Date(targetYear,mi+1,1);
           if(start<monthEnd&&end>=monthStart)m[mo]["Production"]++;
         });
       }
     });
     return MONTHS.filter(mo=>Object.values(m[mo]).some(v=>typeof v==="number"&&v>0)).map(mo=>m[mo]);
+  },[fd,chargeYear]);
+
+  // ── Charge de travail Atelier / Autom par PJ (heures issues de l'import Excel) ──
+  const CAPA_ATELIER_SEM=210; // 6 personnes × 35h/semaine
+  const CAPA_AUTOM_SEM=35;    // 1 poste × 35h/semaine
+  const workloadByPJ=useMemo(()=>{
+    return fd.filter(r=>r.heuresAtelier||r.heuresAutom).map(r=>({
+      pj:r.pj,gamme:r.gamme,
+      heuresAtelier:r.heuresAtelier||0,
+      heuresAutom:r.heuresAutom||0,
+    })).sort((a,b)=>b.heuresAtelier-a.heuresAtelier);
   },[fd]);
+  const totalHeuresAtelier=workloadByPJ.reduce((a,r)=>a+r.heuresAtelier,0);
+  const totalHeuresAutom=workloadByPJ.reduce((a,r)=>a+r.heuresAutom,0);
+
+  // Saturation hebdomadaire : répartit la charge Atelier sur [Arrivée→Fin prod] et Autom sur [Tests→TestsFin], semaine par semaine
+  const saturationByWeek=useMemo(()=>{
+    const weekly={}; // clé = lundi de la semaine en ISO, valeur = {atelier,autom}
+    const addToWeeks=(start,end,totalHeures,type)=>{
+      if(!start||!end||!totalHeures)return;
+      const s=new Date(start),e=new Date(end);
+      const totalMs=Math.max(e-s,86400000); // au moins 1 jour pour éviter division par 0
+      let cur=weekStartOf(s);
+      while(cur<=e){
+        const weekEnd=new Date(cur);weekEnd.setDate(weekEnd.getDate()+7);
+        const segStart=Math.max(cur,s),segEnd=Math.min(weekEnd,e);
+        const overlapMs=Math.max(0,segEnd-segStart);
+        const share=overlapMs/totalMs*totalHeures;
+        const key=toLocalISO(cur);
+        if(!weekly[key])weekly[key]={atelier:0,autom:0,weekStart:new Date(cur)};
+        weekly[key][type]+=share;
+        cur=weekEnd;
+      }
+    };
+    fd.forEach(r=>{
+      if(r.arrivee&&r.finProd)addToWeeks(r.arrivee,r.finProd,r.heuresAtelier,"atelier");
+      if(r.tests&&r.testsFin)addToWeeks(r.tests,r.testsFin,r.heuresAutom,"autom");
+    });
+    return Object.values(weekly)
+      .filter(w=>(!satYear||w.weekStart.getFullYear()===satYear)&&(satMonth==null||w.weekStart.getMonth()===satMonth))
+      .sort((a,b)=>a.weekStart-b.weekStart).map(w=>({
+      semaine:fmt(w.weekStart),
+      semaineMois:fmt(w.weekStart)+" "+MONTHS[w.weekStart.getMonth()],
+      mois:MONTHS[w.weekStart.getMonth()],
+      atelier:Math.round(w.atelier),
+      autom:Math.round(w.autom),
+      satAtelier:Math.round((w.atelier/CAPA_ATELIER_SEM)*100),
+      satAutom:Math.round((w.autom/CAPA_AUTOM_SEM)*100),
+    }));
+  },[fd,satYear,satMonth]);
+
   const countByPays=useMemo(()=>{
     const m={};
     fd.forEach(r=>{const p=getPjMeta(r.pj).pays;m[p]=(m[p]||0)+1;});
@@ -1130,10 +1287,15 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
           </ResponsiveContainer>
         </div>}
 
-        {chargeByMonthMulti.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd,gridColumn:"1 / -1"}}>
-          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Charge prévisionnelle par étape et par mois</div>
-          <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Nombre de machines à chaque étape chaque mois — Production = machines en fabrication ce mois-là</div>
-          <ResponsiveContainer width="100%" height={260}>
+        {fd.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd,gridColumn:"1 / -1"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Charge prévisionnelle par étape et par mois</div>
+              <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Nombre de machines à chaque étape chaque mois — Production = machines en fabrication ce mois-là</div>
+            </div>
+            <PeriodFilter yearsAvailable={yearsInData} year={chargeYear} setYear={setChargeYear} showMonth={false}/>
+          </div>
+          {chargeByMonthMulti.length>0?<ResponsiveContainer width="100%" height={260}>
             <BarChart data={chargeByMonthMulti}>
               <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
               <XAxis dataKey="mois" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
@@ -1146,7 +1308,84 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
               <Bar dataKey="Fin prod" fill={T.emerald500} radius={[4,4,0,0]}/>
               <Bar dataKey="Départ" fill={T.red500} radius={[4,4,0,0]}/>
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>:<div style={{padding:"40px 0",textAlign:"center",color:T.ink300,fontSize:14}}>Aucune donnée pour cette période</div>}
+        </div>}
+
+        {workloadByPJ.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd,gridColumn:"1 / -1"}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>🔧 Charge de travail Atelier / Autom</div>
+          <div style={{fontSize:13,color:T.ink300,marginBottom:14}}>Heures de travail par PJ, issues de l'import Excel (feuille Table_affectation)</div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+            {[[totalHeuresAtelier+"h","Total Atelier",T.teal500],[totalHeuresAutom+"h","Total Autom",T.violet500],[workloadByPJ.length,"PJ avec charge connue",T.ink500]].map(([v,l,c])=>(
+              <div key={l} style={{background:T.surface,borderRadius:10,padding:"12px 16px",borderTop:"3px solid "+c}}>
+                <div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:T.navy800}}>{v}</div>
+                <div style={{fontSize:13,color:T.ink500,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:14}}>
+            <div style={{background:T.surface,borderRadius:10,padding:14,overflow:"auto",maxHeight:380}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:8}}>Détail par PJ</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead><tr style={{borderBottom:"1px solid "+T.line,position:"sticky",top:0,background:T.surface}}>
+                  {["N° PJ","Gamme","Atelier","Autom"].map(h=><th key={h} style={{padding:"6px 10px",textAlign:h==="N° PJ"||h==="Gamme"?"left":"right",fontWeight:700,color:T.ink500,fontSize:12,textTransform:"uppercase"}}>{h}</th>)}
+                </tr></thead>
+                <tbody>{workloadByPJ.map(r=>(
+                  <tr key={r.pj} style={{borderBottom:"1px solid "+T.surfaceAlt}}>
+                    <td style={{padding:"7px 10px",fontWeight:700,color:T.teal600}}>{r.pj}</td>
+                    <td style={{padding:"7px 10px",color:T.ink500}}>{r.gamme}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:T.navy800}}>{r.heuresAtelier}h</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:T.violet600}}>{r.heuresAutom}h</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+
+            {workloadByPJ.length>0&&<>
+              <div style={{background:T.surface,borderRadius:10,padding:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:4}}>Taux de saturation hebdomadaire</div>
+                    <div style={{fontSize:12,color:T.ink300,marginBottom:8}}>Atelier (capacité {CAPA_ATELIER_SEM}h/sem.) vs Autom (capacité {CAPA_AUTOM_SEM}h/sem.)</div>
+                  </div>
+                  <PeriodFilter yearsAvailable={yearsInData} year={satYear} setYear={setSatYear} month={satMonth} setMonth={setSatMonth}/>
+                </div>
+                {saturationByWeek.length>0?<ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={saturationByWeek}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
+                    <XAxis dataKey="semaineMois" tick={{fontSize:10.5,fill:T.ink500}} angle={-35} textAnchor="end" height={55}/>
+                    <YAxis tick={{fontSize:12,fill:T.ink500}} tickFormatter={v=>v+"%"}/>
+                    <Tooltip formatter={(v,n)=>[v+"%",n]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+                    <Legend wrapperStyle={{fontSize:13}}/>
+                    <Line type="monotone" dataKey="satAtelier" name="Atelier" stroke={T.teal500} strokeWidth={3} dot={{r:4,fill:T.teal500}}/>
+                    <Line type="monotone" dataKey="satAutom" name="Autom" stroke={T.violet500} strokeWidth={3} dot={{r:4,fill:T.violet500}}/>
+                  </LineChart>
+                </ResponsiveContainer>:<div style={{padding:"40px 0",textAlign:"center",color:T.ink300,fontSize:14}}>Aucune donnée pour cette période</div>}
+              </div>
+
+              <div style={{background:T.surface,borderRadius:10,padding:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:4}}>Heures de travail hebdomadaires</div>
+                    <div style={{fontSize:12,color:T.ink300,marginBottom:8}}>Volume brut d'heures Atelier et Autom, semaine par semaine</div>
+                  </div>
+                  <PeriodFilter yearsAvailable={yearsInData} year={satYear} setYear={setSatYear} month={satMonth} setMonth={setSatMonth}/>
+                </div>
+                {saturationByWeek.length>0?<ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={saturationByWeek}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
+                    <XAxis dataKey="semaineMois" tick={{fontSize:10.5,fill:T.ink500}} angle={-35} textAnchor="end" height={55}/>
+                    <YAxis tick={{fontSize:12,fill:T.ink500}} tickFormatter={v=>v+"h"}/>
+                    <Tooltip formatter={(v,n)=>[v+"h",n]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+                    <Legend wrapperStyle={{fontSize:13}}/>
+                    <Line type="monotone" dataKey="atelier" name="Atelier" stroke={T.teal500} strokeWidth={3} dot={{r:4,fill:T.teal500}}/>
+                    <Line type="monotone" dataKey="autom" name="Autom" stroke={T.violet500} strokeWidth={3} dot={{r:4,fill:T.violet500}}/>
+                  </LineChart>
+                </ResponsiveContainer>:<div style={{padding:"40px 0",textAlign:"center",color:T.ink300,fontSize:14}}>Aucune donnée pour cette période</div>}
+              </div>
+            </>}
+          </div>
         </div>}
 
         <div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
@@ -1230,20 +1469,61 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
             </ResponsiveContainer>
           </div>}
 
-          {pjCompareChart.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14,marginBottom:14}}>
+          {pjCompareChart.length>0&&<div style={{background:T.surface,borderRadius:10,padding:16,marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:4}}>Date de {STEP_LABELS[kpiStep].toLowerCase()} par PJ — Initial vs Révisé</div>
-            <div style={{fontSize:12,color:T.ink300,marginBottom:8}}>Chaque paire de barres montre le glissement réel de la date, PJ par PJ</div>
-            <ResponsiveContainer width="100%" height={Math.max(200,pjCompareChart.length*32)}>
-              <BarChart data={pjCompareChart} layout="vertical" margin={{left:10,right:20}}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
-                <XAxis type="number" tick={{fontSize:11,fill:T.ink500}} tickFormatter={v=>{const d=new Date(yearStart);d.setDate(d.getDate()+v);return MONTHS[d.getMonth()];}}/>
-                <YAxis type="category" dataKey="pj" width={90} tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
-                <Tooltip formatter={(v,n,p)=>{const isIni=n==="initial";return[fmt(new Date(isIni?p.payload.dateIni:p.payload.dateRev)),isIni?"Initial":"Révisé"];}} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
-                <Legend wrapperStyle={{fontSize:13}} formatter={v=>v==="initial"?"Initial":"Révisé"}/>
-                <Bar dataKey="initial" fill={T.ink300} radius={[0,4,4,0]}/>
-                <Bar dataKey="revise" fill={T.teal500} radius={[0,4,4,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
+            <div style={{fontSize:12,color:T.ink300,marginBottom:12}}>Chaque ligne relie la date promise à la date réelle — la longueur et la couleur indiquent l'ampleur du glissement</div>
+            {(()=>{
+              const rowHd=34,labelW=78,leftPad=20,rightPad=20,topPad=28,bottomPad=4;
+              const minD=Math.min(...pjCompareChart.map(p=>Math.min(p.initial,p.revise)));
+              const maxD=Math.max(...pjCompareChart.map(p=>Math.max(p.initial,p.revise)));
+              const pad=Math.max((maxD-minD)*0.08,3);
+              const domainMin=minD-pad,domainMax=maxD+pad;
+              const span=Math.max(domainMax-domainMin,1);
+              const chartW=720;
+              const plotW=chartW-labelW-leftPad-rightPad;
+              const chartH=pjCompareChart.length*rowHd+topPad+bottomPad;
+              const xOf=v=>labelW+leftPad+((v-domainMin)/span)*plotW;
+              // graduations : un repère par début de mois dans la plage couverte
+              const monthTicks=[];
+              const dStart=new Date(yearStart);dStart.setDate(dStart.getDate()+Math.floor(domainMin));
+              let curM=new Date(dStart.getFullYear(),dStart.getMonth(),1);
+              const dEnd=new Date(yearStart);dEnd.setDate(dEnd.getDate()+Math.ceil(domainMax));
+              while(curM<=dEnd){monthTicks.push(new Date(curM));curM=new Date(curM.getFullYear(),curM.getMonth()+1,1);}
+              return(<div style={{overflowX:"auto"}}>
+                <svg width="100%" height={chartH} viewBox={"0 0 "+chartW+" "+chartH} preserveAspectRatio="xMinYMin meet" style={{minWidth:600,fontFamily:T.font}}>
+                  {/* grille de fond : repères mensuels */}
+                  {monthTicks.map((mt,i)=>{const dv=dayOfYear(mt);const x=xOf(dv);if(x<labelW||x>chartW-2)return null;return(
+                    <g key={i}>
+                      <line x1={x} x2={x} y1={topPad-6} y2={chartH-bottomPad} stroke={T.line} strokeWidth={1} strokeDasharray="3 3"/>
+                      <text x={x} y={topPad-12} fontSize={10.5} fontWeight={700} fill={T.ink300} textAnchor="middle">{MONTHS[mt.getMonth()]}</text>
+                    </g>
+                  );})}
+                  {/* lignes alternées pour la lisibilité */}
+                  {pjCompareChart.map((p,i)=>i%2===0&&<rect key={"bg"+i} x={0} y={topPad+i*rowHd} width={chartW} height={rowHd} fill={T.card} opacity={0.5}/>)}
+
+                  {pjCompareChart.map((p,i)=>{
+                    const y=topPad+i*rowHd+rowHd/2;
+                    const x1=xOf(p.initial),x2=xOf(p.revise);
+                    const late=p.delta>0;
+                    const dotColor=late?T.red500:p.delta<0?T.emerald500:T.ink500;
+                    const dIni=new Date(yearStart);dIni.setDate(dIni.getDate()+p.initial);
+                    const dRev=new Date(yearStart);dRev.setDate(dRev.getDate()+p.revise);
+                    return(<g key={p.pj}>
+                      <text x={6} y={y+4} fontSize={13} fontWeight={700} fill={T.teal600}>{p.pj}</text>
+                      <line x1={Math.min(x1,x2)} x2={Math.max(x1,x2)} y1={y} y2={y} stroke={dotColor} strokeWidth={2.5} strokeOpacity={0.35}/>
+                      <circle cx={x1} cy={y} r={5} fill="#fff" stroke={T.ink300} strokeWidth={2}/>
+                      <circle cx={x2} cy={y} r={6} fill={dotColor}/>
+                      <text x={x2} y={y-11} fontSize={10.5} fontWeight={700} fill={dotColor} textAnchor="middle">{p.delta===0?"=":(p.delta>0?"+":"")+p.delta+"j"}</text>
+                    </g>);
+                  })}
+                </svg>
+              </div>);
+            })()}
+            <div style={{display:"flex",gap:18,marginTop:12,paddingTop:12,borderTop:"1px solid "+T.line,flexWrap:"wrap"}}>
+              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500}}><span style={{width:11,height:11,borderRadius:"50%",background:"#fff",border:"2px solid "+T.ink300,display:"inline-block"}}/>Date initiale</span>
+              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500}}><span style={{width:11,height:11,borderRadius:"50%",background:T.red500,display:"inline-block"}}/>Révisée — retard</span>
+              <span style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500}}><span style={{width:11,height:11,borderRadius:"50%",background:T.emerald500,display:"inline-block"}}/>Révisée — avance</span>
+            </div>
           </div>}
 
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:14,marginBottom:14}}>
@@ -1286,22 +1566,6 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
               </div>
             </div>}
           </div>
-
-          {detailByPJTable.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14,overflow:"auto"}}>
-            <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:8}}>Détail par PJ — écart (jours) sur chaque jalon</div>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{borderBottom:"1px solid "+T.line}}>
-                {["N° PJ","Gamme","Arrivée","Tests","Fin prod","Départ"].map(h=><th key={h} style={{padding:"6px 10px",textAlign:h==="N° PJ"||h==="Gamme"?"left":"center",fontWeight:700,color:T.ink500,fontSize:12,textTransform:"uppercase"}}>{h}</th>)}
-              </tr></thead>
-              <tbody>{detailByPJTable.map(r=>(
-                <tr key={r.pj} style={{borderBottom:"1px solid "+T.surfaceAlt}}>
-                  <td style={{padding:"7px 10px",fontWeight:700,color:T.teal600}}>{r.pj}</td>
-                  <td style={{padding:"7px 10px",color:T.ink500}}>{r.gamme}</td>
-                  {[r.dArrivee,r.dTests,r.dFinProd,r.dDepart].map((d,i)=><td key={i} style={{padding:"7px 10px",textAlign:"center",fontWeight:700,color:d==null?T.ink300:d>0?T.red500:d<0?T.emerald500:T.ink500}}>{d==null?"—":(d>0?"+":"")+d}</td>)}
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>}
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:14}}>
@@ -1337,10 +1601,18 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
             </ResponsiveContainer>
           </div>}
 
-          {driftTrend.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-            <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Dérive moyenne par mois de départ</div>
-            <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Périodes où les retards sont les plus fréquents — la situation s'améliore-t-elle dans le temps ?</div>
-            <ResponsiveContainer width="100%" height={220}>
+          {comparable.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+              <div>
+                <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Dérive moyenne par mois de départ</div>
+                <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Périodes où les retards sont les plus fréquents — la situation s'améliore-t-elle dans le temps ?</div>
+              </div>
+              <select value={driftMoisYear||""} onChange={e=>setDriftMoisYear(e.target.value?+e.target.value:null)} style={{padding:"4px 8px",borderRadius:7,border:"1px solid "+T.line,fontSize:12,fontFamily:T.font,color:T.ink700,background:T.card,height:30}}>
+                <option value="">Toutes années</option>
+                {yearsInData.map(y=><option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            {driftTrend.length>0?<ResponsiveContainer width="100%" height={220}>
               <LineChart data={driftTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
                 <XAxis dataKey="mois" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
@@ -1348,7 +1620,7 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
                 <Tooltip formatter={(v,n,p)=>[v+"j (n="+p.payload.n+")","Dérive moyenne"]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
                 <Line type="monotone" dataKey="moyenne" stroke={T.violet500} strokeWidth={3} dot={({cx,cy,payload})=><circle key={payload.mois} cx={cx} cy={cy} r={5} fill={payload.moyenne>0?T.red500:T.emerald500}/>}/>
               </LineChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>:<div style={{padding:"40px 0",textAlign:"center",color:T.ink300,fontSize:14}}>Aucune donnée pour cette période</div>}
           </div>}
 
         </div>
@@ -1437,14 +1709,26 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
       </div>
       {data.map(r=>{
         const current=etatChoice[r.pj]||"A_DEFINIR";
-        return(<div key={r.pj} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:"1px solid "+T.surface,flexWrap:"wrap"}}>
-          <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:110,flexShrink:0}}>{r.pj}</span>
-          <span style={{color:T.ink300,fontSize:14,minWidth:60,flexShrink:0}}>{r.gamme}</span>
-          <Badge etat={current}/>
-          <div style={{display:"flex",gap:6,marginLeft:"auto",flexWrap:"wrap"}}>
-            {ASSIGNABLE_ETATS.map(e=>{const m=ETAT_META[e];const active=current===e;return(
-              <button key={e} onClick={()=>setEtatFor(r.pj,e)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(active?m.bar:T.line),background:active?m.bar:T.card,color:active?"#fff":T.ink700,fontSize:13,fontWeight:600,cursor:"pointer"}}>{m.label}</button>
-            );})}
+        const presence=clientPresence[r.pj]||{present:false,date:""};
+        return(<div key={r.pj} style={{padding:"11px 0",borderBottom:"1px solid "+T.surface}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:110,flexShrink:0}}>{r.pj}</span>
+            <span style={{color:T.ink300,fontSize:14,minWidth:60,flexShrink:0}}>{r.gamme}</span>
+            <Badge etat={current}/>
+            <div style={{display:"flex",gap:6,marginLeft:"auto",flexWrap:"wrap"}}>
+              {ASSIGNABLE_ETATS.map(e=>{const m=ETAT_META[e];const active=current===e;return(
+                <button key={e} onClick={()=>setEtatFor(r.pj,e)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(active?m.bar:T.line),background:active?m.bar:T.card,color:active?"#fff":T.ink700,fontSize:13,fontWeight:600,cursor:"pointer"}}>{m.label}</button>
+              );})}
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginTop:10,paddingLeft:122,flexWrap:"wrap"}}>
+            <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+              <div onClick={()=>setClientPresenceFor(r.pj,{...presence,present:!presence.present})} style={{width:46,height:26,borderRadius:13,background:presence.present?T.violet500:T.surfaceAlt,position:"relative",transition:"background .15s"}}>
+                <div style={{width:21,height:21,borderRadius:"50%",background:"#fff",position:"absolute",top:2.5,left:presence.present?23:2.5,transition:"left .15s",boxShadow:T.shadowSm}}/>
+              </div>
+              <span style={{fontSize:15,color:T.ink700,fontWeight:700}}>👤 Présence client / NOBO aux tests</span>
+            </label>
+            {presence.present&&<input type="date" value={presence.date||""} onChange={e=>setClientPresenceFor(r.pj,{...presence,date:e.target.value})} style={{padding:"7px 11px",borderRadius:8,border:"1.5px solid "+T.violet500,fontSize:14,fontFamily:T.font,color:T.ink700,fontWeight:600}}/>}
           </div>
         </div>);
       })}
@@ -1530,21 +1814,26 @@ export default function App(){
   const [initialImporting,setInitialImporting]=useState(false);
   const [lastInitialImport,setLastInitialImport]=useState(null);
   const [view,setView]=useState("table");
+  const [calMode,setCalMode]=useState("week");
+  const [calAnchor,setCalAnchor]=useState(()=>weekStartOf(today));
+  const [calDayAnchor,setCalDayAnchor]=useState(()=>{const d=new Date(today);d.setHours(0,0,0,0);return d;});
+  const [managerTab,setManagerTab]=useState("derives");
   const [selEtats,setSelEtats]=useState(new Set(ALL_ETATS));
   const [selGammes,setSelGammes]=useState(new Set(ALL_GAMMES));
   const [selMoisArrivee,setSelMoisArrivee]=useState(new Set(MONTHS));
   const [selMoisTests,setSelMoisTests]=useState(new Set(MONTHS));
   const [selMoisFinProd,setSelMoisFinProd]=useState(new Set(MONTHS));
   const [selMoisDepart,setSelMoisDepart]=useState(new Set(MONTHS));
-  const [selPJs,setSelPJs]=useState(new Set());
-  const [selProjets,setSelProjets]=useState(new Set());
-  const [selPays,setSelPays]=useState(new Set());
-  const [selChefs,setSelChefs]=useState(new Set());
+  const [selPJs,setSelPJs]=useState(null);
+  const [selProjets,setSelProjets]=useState(null);
+  const [selPays,setSelPays]=useState(null);
+  const [selChefs,setSelChefs]=useState(null);
   const [df,setDf]=useState("date");
   const [pinOk,setPinOk]=useState(false);
   const [progress,setProgress]=useState({});
   const [calSel,setCalSel]=useState(null);
   const [etatChoice,setEtatChoice]=useState({});
+  const [clientPresence,setClientPresence]=useState({});
 
   // Lecture temps réel depuis Firestore
   useEffect(()=>{
@@ -1583,12 +1872,23 @@ export default function App(){
         const d = snap.data();
         setEtatChoice(d.etatChoice || {});
         setProgress(d.progress || {});
+        setClientPresence(d.clientPresence || {});
       }
     }, (err)=>{
       console.error("Erreur Firestore (overrides):", err);
     });
     return ()=>unsub();
   },[]);
+
+  const setClientPresenceFor=useCallback(async (pj,value)=>{
+    const next={...clientPresence,[pj]:value};
+    try{
+      await setDoc(OVERRIDES_DOC_REF(), { clientPresence:next }, { merge:true });
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement : " + e.message);
+    }
+  },[clientPresence]);
 
   const setEtatFor=useCallback(async (pj,etat)=>{
     const next={...etatChoice,[pj]:etat};
@@ -1648,16 +1948,16 @@ export default function App(){
   const allChefs=useMemo(()=>[...new Set(data.map(r=>getPjMeta(r.pj).chefProjet))].sort(),[data]);
 
   // L'état affiché vient exclusivement du choix manuel du Manager (etatChoice), sinon "À définir"
-  const dataWithOverrides=useMemo(()=>data.map(r=>({...r,etat:etatChoice[r.pj]||r.etat||"A_DEFINIR"})),[data,etatChoice]);
+  const dataWithOverrides=useMemo(()=>data.map(r=>({...r,etat:etatChoice[r.pj]||r.etat||"A_DEFINIR",clientPresence:clientPresence[r.pj]||null})),[data,etatChoice,clientPresence]);
 
   const filtered=useMemo(()=>dataWithOverrides.filter(r=>{
     if(!selEtats.has(r.etat))return false;
     if(!selGammes.has(r.gamme))return false;
-    if(selPJs.size>0&&selPJs.size<allPJs.length&&!selPJs.has(r.pj))return false;
+    if(selPJs&&!selPJs.has(r.pj))return false;
     const meta=getPjMeta(r.pj);
-    if(selProjets.size>0&&selProjets.size<allProjets.length&&!selProjets.has(meta.nomProjet))return false;
-    if(selPays.size>0&&selPays.size<allPays.length&&!selPays.has(meta.pays))return false;
-    if(selChefs.size>0&&selChefs.size<allChefs.length&&!selChefs.has(meta.chefProjet))return false;
+    if(selProjets&&!selProjets.has(meta.nomProjet))return false;
+    if(selPays&&!selPays.has(meta.pays))return false;
+    if(selChefs&&!selChefs.has(meta.chefProjet))return false;
     if(selMoisArrivee.size<MONTHS.length){const m=r.arrivee?MONTHS[new Date(r.arrivee).getMonth()]:null;if(!m||!selMoisArrivee.has(m))return false;}
     if(selMoisTests.size<MONTHS.length){const m=r.tests?MONTHS[new Date(r.tests).getMonth()]:null;if(!m||!selMoisTests.has(m))return false;}
     if(selMoisFinProd.size<MONTHS.length){const m=r.finProd?MONTHS[new Date(r.finProd).getMonth()]:null;if(!m||!selMoisFinProd.has(m))return false;}
@@ -1712,7 +2012,8 @@ export default function App(){
               <button onClick={()=>setPinOk(false)} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:15,cursor:"pointer",color:T.ink700,fontWeight:600}}>Verrouiller</button>
             </div>
             <ManagerPanel data={dataWithOverrides} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}
-              etatChoice={etatChoice} setEtatFor={setEtatFor} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}/>
+              etatChoice={etatChoice} setEtatFor={setEtatFor} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}
+              tab={managerTab} setTab={setManagerTab} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(
@@ -1729,7 +2030,9 @@ export default function App(){
               selMoisFinProd={selMoisFinProd} setSelMoisFinProd={setSelMoisFinProd}
               selMoisDepart={selMoisDepart} setSelMoisDepart={setSelMoisDepart}/>}
             {view==="gantt"&&<GanttView data={filtered} progress={progress} df={df}/>}
-            {view==="calendar"&&<CalendarView data={filtered} onSelectPj={setCalSel}/>}
+            {view==="calendar"&&<CalendarView data={filtered} onSelectPj={setCalSel}
+              mode={calMode} setMode={setCalMode} anchor={calAnchor} setAnchor={setCalAnchor}
+              dayAnchor={calDayAnchor} setDayAnchor={setCalDayAnchor}/>}
           </>
         )}
       </>
