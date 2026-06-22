@@ -32,8 +32,8 @@ const T = {
   shadowSm:"0 1px 2px rgba(15,40,60,.06), 0 1px 1px rgba(15,40,60,.04)",
   shadowMd:"0 4px 14px rgba(15,40,60,.08), 0 1px 3px rgba(15,40,60,.06)",
   shadowLg:"0 12px 32px rgba(15,40,60,.12), 0 2px 6px rgba(15,40,60,.06)",
-  font:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-  fontDisplay:"'Space Grotesk','Inter',-apple-system,sans-serif",
+  font:"'Roboto',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+  fontDisplay:"'Abel','Roboto',-apple-system,sans-serif",
 };
 
 const PJ_META={
@@ -70,6 +70,7 @@ const PJ_META={
   "PJ479-2":{nomProjet:"EDF PEI",pays:"FR-La Réunion",chefProjet:"Clément MARTOUZET"},
   "PJ485":{nomProjet:"BIOSORRA",pays:"Kenya",chefProjet:"Clément MARTOUZET"},
   "PJ486":{nomProjet:"ALBRET",pays:"France",chefProjet:"Emmy BOURELLY"},
+  "PJ488":{nomProjet:"KAGOSHIMA",pays:"Japon",chefProjet:"Gabriel VINCENT"},
 };
 function getPjMeta(pj){
   if(PJ_META[pj])return PJ_META[pj];
@@ -87,7 +88,7 @@ function initials(name){
 const COUNTRY_ISO={
   "France":"fr","UK":"gb","Nigeria":"ng","Corée":"kr","Espagne":"es",
   "Singapore":"sg","Norvège":"no","Islande":"is","Kenya":"ke",
-  "FR-La Réunion":"re",
+  "FR-La Réunion":"re","Japon":"jp",
 };
 function CountryFlag({pays,size}){
   const iso=COUNTRY_ISO[pays];
@@ -145,7 +146,12 @@ function guessGamme(pj){
   return"180LTV3";
 }
 
-function parseMSProjectRows(rows){
+function parseWorkHours(s){
+  if(!s)return 0;
+  const m=String(s).replace(",",".").match(/([\d.]+)/);
+  return m?parseFloat(m[1]):0;
+}
+function parseMSProjectRows(rows,affectationRows){
   if(!rows||rows.length<2)return null;
   const header=rows[0].map(h=>(h||"").toString().toLowerCase().trim());
   const iNom=header.findIndex(h=>h.includes("nom")||h.includes("name"));
@@ -153,6 +159,27 @@ function parseMSProjectRows(rows){
   const iFin=header.findIndex(h=>h.includes("fin")||h.includes("finish")||h.includes("end"));
   const iNiv=header.findIndex(h=>h.includes("niveau")||h.includes("level")||h.includes("hiérar")||h.includes("hierar"));
   if(iNom<0||iDeb<0)return null;
+
+  // Préparation des lignes d'affectation (charge de travail par tâche/ressource), si fournies
+  let affIdx=0,aHeader=null,aNom=-1,aRes=-1,aTrav=-1;
+  if(affectationRows&&affectationRows.length>1){
+    aHeader=affectationRows[0].map(h=>(h||"").toString().toLowerCase().trim());
+    aNom=aHeader.findIndex(h=>h.includes("tâche")||h.includes("tache"));
+    aRes=aHeader.findIndex(h=>h.includes("ressource"));
+    aTrav=aHeader.findIndex(h=>h==="travail"||(h.includes("travail")&&!h.includes("%")&&!h.includes("achevé")));
+  }
+  const STEP_NAMES_FR=["arrivée","production","tests","fin de production","départ"];
+  const nextAffectationFor=stepNameFR=>{
+    // Avance dans Table_affectation tant que le nom de tâche correspond bien à l'étape attendue (alignement séquentiel)
+    if(aNom<0||!affectationRows)return null;
+    if(affIdx>=affectationRows.length-1)return null;
+    const row=affectationRows[affIdx+1];
+    if(!row)return null;
+    const nom=(row[aNom]||"").toString().trim().toLowerCase();
+    if(nom!==stepNameFR)return null; // désynchronisé : on ne consomme pas, on abandonne le suivi pour ce PJ
+    affIdx++;
+    return{ressource:(row[aRes]||"").toString().trim(),heures:parseWorkHours(row[aTrav])};
+  };
 
   const STEP_MAP={"arrivée":"arrivee","arrivee":"arrivee","tests":"tests","fin de production":"finProd","départ":"depart","depart":"depart"};
   const out=[];let cur=null;
@@ -165,15 +192,22 @@ function parseMSProjectRows(rows){
     const niv=iNiv>=0?parseInt(row[iNiv])||0:0;
     const nomL=nom.toLowerCase().trim();
 
-    if(niv===1||(niv===0&&!STEP_MAP[nomL])){
+    if(niv===1||(niv===0&&!STEP_MAP[nomL]&&nomL!=="production")){
       const pjM=nom.match(/PJ[\w-]+/i)||nom.match(/SAV\d+/i);
       const pjCode=pjM?pjM[0].toUpperCase():nom.split(/[-–]/)[0].trim();
-      cur={pj:pjCode,nom:nom,gamme:guessGamme(pjCode),etat:"A_DEFINIR",arrivee:null,tests:null,testsFin:null,finProd:null,depart:null};
+      cur={pj:pjCode,nom:nom,gamme:guessGamme(pjCode),etat:"A_DEFINIR",arrivee:null,tests:null,testsFin:null,finProd:null,depart:null,
+        heuresAtelier:0,heuresAutom:0,production:null};
       out.push(cur);
-    } else if(cur&&STEP_MAP[nomL]){
+    } else if(cur&&(STEP_MAP[nomL]||nomL==="production")){
       const k=STEP_MAP[nomL];
-      cur[k]=deb;
-      if(k==="tests")cur.testsFin=fin;
+      if(k){cur[k]=deb;if(k==="tests")cur.testsFin=fin;}
+      if(nomL==="production")cur.production=deb;
+      const aff=nextAffectationFor(nomL);
+      if(aff){
+        const r=aff.ressource.toLowerCase();
+        if(r.includes("atelier"))cur.heuresAtelier+=aff.heures;
+        else if(r.includes("autom"))cur.heuresAutom+=aff.heures;
+      }
     }
   }
   // L'état n'est plus calculé automatiquement : il démarre à "À définir" et c'est au Manager de le fixer manuellement.
@@ -185,6 +219,8 @@ function parseMSProjectRows(rows){
     testsFin:toLocalISO(p.testsFin),
     finProd:toLocalISO(p.finProd),
     depart:toLocalISO(p.depart),
+    heuresAtelier:p.heuresAtelier,
+    heuresAutom:p.heuresAutom,
   }));
 }
 
@@ -250,6 +286,7 @@ function GanttView({data,progress,df}){
   const rowH=54;
   const [tt,setTt]=useState(null);
   const scrollRef=React.useRef(null);
+  const topScrollRef=React.useRef(null);
   const dayOf=d=>Math.round((d-yearStart)/86400000);
   const xOf=d=>dayOf(d)*dayW;
 
@@ -258,11 +295,20 @@ function GanttView({data,progress,df}){
     if(scrollRef.current){
       const target=Math.max(0,xOf(today)-220);
       scrollRef.current.scrollLeft=target;
+      if(topScrollRef.current)topScrollRef.current.scrollLeft=target;
     }
   },[]);
 
+  // synchronisation bidirectionnelle entre la barre de scroll du haut (factice) et le contenu réel
+  const syncFromTop=()=>{if(scrollRef.current&&topScrollRef.current)scrollRef.current.scrollLeft=topScrollRef.current.scrollLeft;};
+  const syncFromBottom=()=>{if(scrollRef.current&&topScrollRef.current)topScrollRef.current.scrollLeft=scrollRef.current.scrollLeft;};
+
   const scrollToDay=dIdx=>{
-    if(scrollRef.current)scrollRef.current.scrollTo({left:Math.max(0,dIdx*dayW-220),behavior:"smooth"});
+    if(scrollRef.current){
+      const target=Math.max(0,dIdx*dayW-220);
+      scrollRef.current.scrollTo({left:target,behavior:"smooth"});
+      if(topScrollRef.current)topScrollRef.current.scrollTo({left:target,behavior:"smooth"});
+    }
   };
 
   // graduations : un repère par début de semaine (lundi)
@@ -283,7 +329,11 @@ function GanttView({data,progress,df}){
       <button onClick={()=>scrollToDay(dayOf(today))} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer"}}>📍 Aujourd'hui</button>
     </div>
 
-    <div ref={scrollRef} style={{display:"flex",overflowX:"auto",position:"relative"}}>
+    <div ref={topScrollRef} onScroll={syncFromTop} style={{overflowX:"auto",overflowY:"hidden",height:16}}>
+      <div style={{width:colW+totalDays*dayW,height:1}}/>
+    </div>
+
+    <div ref={scrollRef} onScroll={syncFromBottom} style={{display:"flex",overflowX:"auto",position:"relative"}}>
       <div style={{width:colW,flexShrink:0,position:"sticky",left:0,zIndex:5,background:T.card,borderRight:"1px solid "+T.line,boxShadow:"2px 0 6px rgba(15,40,60,.04)"}}>
         <div style={{height:46,padding:"0 16px",display:"flex",alignItems:"center",fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".04em",borderBottom:"1px solid "+T.line,background:T.surface}}>Projet</div>
         {data.map((r,ri)=>{
@@ -479,29 +529,79 @@ function ColumnPicker({hidden,setHidden}){
     </>}
   </span>);
 }
+const DEFAULT_COL_WIDTHS_PCT={pj:8,projet:12,pays:9,chef:8,gamme:7,etat:11,arrivee:8,tests:12,finprod:8,depart:8,avancement:9};
+function ResizeHandle({colId,nextColId,colWidths,setColWidths}){
+  const onMouseDown=e=>{
+    e.preventDefault();
+    const startX=e.clientX;
+    const table=e.target.closest("table");
+    const tableW=table?table.getBoundingClientRect().width:1000;
+    const startW=colWidths[colId];
+    const startNextW=nextColId?colWidths[nextColId]:null;
+    const onMove=ev=>{
+      const deltaPct=((ev.clientX-startX)/tableW)*100;
+      setColWidths(w=>{
+        const next={...w};
+        const newW=Math.max(5,startW+deltaPct);
+        if(nextColId&&startNextW!=null){
+          // Transfère la largeur entre la colonne courante et la suivante, la somme totale reste constante
+          const newNextW=Math.max(5,startNextW-deltaPct);
+          const actualDelta=newW-startW;
+          next[colId]=startW+actualDelta;
+          next[nextColId]=startNextW-actualDelta;
+        }else{
+          next[colId]=newW;
+        }
+        return next;
+      });
+    };
+    const onUp=()=>{window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+    window.addEventListener("mousemove",onMove);
+    window.addEventListener("mouseup",onUp);
+  };
+  return <div onMouseDown={onMouseDown} style={{position:"absolute",right:-3,top:0,bottom:0,width:6,cursor:"col-resize",zIndex:3}}/>;
+}
 function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart}){
   const [sel,setSel]=useState(null);
   const [hiddenCols,setHiddenCols]=useState(new Set());
+  const [colWidths,setColWidths]=useState(DEFAULT_COL_WIDTHS_PCT);
   const show=id=>!hiddenCols.has(id);
-  const thBase={padding:"10px 14px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:15,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".04em"};
+  const cw=id=>(colWidths[id]||DEFAULT_COL_WIDTHS_PCT[id])+"%";
+  // Liste ordonnée des colonnes actuellement visibles, pour savoir quelle est "la suivante" lors du redimensionnement
+  const visibleColOrder=["pj","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement"].filter(id=>id==="pj"||show(id));
+  const nextVisible=id=>{const i=visibleColOrder.indexOf(id);return i>=0&&i<visibleColOrder.length-1?visibleColOrder[i+1]:null;};
+  const thBase={padding:"10px 14px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:15,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".04em",position:"relative",overflow:"hidden"};
   return(<div style={{background:T.card,borderRadius:14,boxShadow:T.shadowMd,fontFamily:T.font}}>
-    <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.line,display:"flex",justifyContent:"flex-end"}}>
+    <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.line,display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
       <ColumnPicker hidden={hiddenCols} setHidden={setHiddenCols}/>
     </div>
     <div style={{overflow:"auto"}}>
-    <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"auto"}}>
+    <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
+      <colgroup>
+        <col style={{width:cw("pj")}}/>
+        {show("projet")&&<col style={{width:cw("projet")}}/>}
+        {show("pays")&&<col style={{width:cw("pays")}}/>}
+        {show("chef")&&<col style={{width:cw("chef")}}/>}
+        {show("gamme")&&<col style={{width:cw("gamme")}}/>}
+        {show("etat")&&<col style={{width:cw("etat")}}/>}
+        {show("arrivee")&&<col style={{width:cw("arrivee")}}/>}
+        {show("tests")&&<col style={{width:cw("tests")}}/>}
+        {show("finprod")&&<col style={{width:cw("finprod")}}/>}
+        {show("depart")&&<col style={{width:cw("depart")}}/>}
+        {show("avancement")&&<col style={{width:cw("avancement")}}/>}
+      </colgroup>
       <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line}}>
-        <th style={thBase}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs.size>0?selPJs:new Set(allPJs)} onChange={setSelPJs}/>}</th>
-        {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets.size>0?selProjets:new Set(allProjets)} onChange={setSelProjets}/>}</th>}
-        {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays.size>0?selPays:new Set(allPays)} onChange={setSelPays}/>}</th>}
-        {show("chef")&&<th style={thBase}>Chef de Projet {allChefs&&<DropFilter label="" icon options={allChefs} selected={selChefs.size>0?selChefs:new Set(allChefs)} onChange={setSelChefs} getLabel={o=>initials(o)+" — "+o}/>}</th>}
-        {show("gamme")&&<th style={thBase}>Gamme {setSelGammes&&<DropFilter label="" icon options={ALL_GAMMES} selected={selGammes} onChange={setSelGammes}/>}</th>}
-        {show("etat")&&<th style={thBase}>État {setSelEtats&&<DropFilter label="" icon options={ALL_ETATS} selected={selEtats} onChange={setSelEtats} getLabel={o=>ETAT_META[o]?.label||o}/>}</th>}
-        {show("arrivee")&&<th style={thBase}>Arrivée {setSelMoisArrivee&&<DropFilter label="" icon options={MONTHS} selected={selMoisArrivee} onChange={setSelMoisArrivee}/>}</th>}
-        {show("tests")&&<th style={thBase}>Tests {setSelMoisTests&&<DropFilter label="" icon options={MONTHS} selected={selMoisTests} onChange={setSelMoisTests}/>}</th>}
-        {show("finprod")&&<th style={thBase}>Fin prod {setSelMoisFinProd&&<DropFilter label="" icon options={MONTHS} selected={selMoisFinProd} onChange={setSelMoisFinProd}/>}</th>}
-        {show("depart")&&<th style={thBase}>Départ {setSelMoisDepart&&<DropFilter label="" icon options={MONTHS} selected={selMoisDepart} onChange={setSelMoisDepart}/>}</th>}
-        {show("avancement")&&<th style={thBase}>Avancement</th>}
+        <th style={thBase}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs.size>0?selPJs:new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths}/></th>
+        {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets.size>0?selProjets:new Set(allProjets)} onChange={setSelProjets}/>}<ResizeHandle colId="projet" nextColId={nextVisible("projet")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays.size>0?selPays:new Set(allPays)} onChange={setSelPays}/>}<ResizeHandle colId="pays" nextColId={nextVisible("pays")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("chef")&&<th style={thBase}>Chef de Projet {allChefs&&<DropFilter label="" icon options={allChefs} selected={selChefs.size>0?selChefs:new Set(allChefs)} onChange={setSelChefs} getLabel={o=>initials(o)+" — "+o}/>}<ResizeHandle colId="chef" nextColId={nextVisible("chef")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("gamme")&&<th style={thBase}>Gamme {setSelGammes&&<DropFilter label="" icon options={ALL_GAMMES} selected={selGammes} onChange={setSelGammes}/>}<ResizeHandle colId="gamme" nextColId={nextVisible("gamme")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("etat")&&<th style={thBase}>État {setSelEtats&&<DropFilter label="" icon options={ALL_ETATS} selected={selEtats} onChange={setSelEtats} getLabel={o=>ETAT_META[o]?.label||o}/>}<ResizeHandle colId="etat" nextColId={nextVisible("etat")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("arrivee")&&<th style={thBase}>Arrivée {setSelMoisArrivee&&<DropFilter label="" icon options={MONTHS} selected={selMoisArrivee} onChange={setSelMoisArrivee}/>}<ResizeHandle colId="arrivee" nextColId={nextVisible("arrivee")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("tests")&&<th style={thBase}>Tests {setSelMoisTests&&<DropFilter label="" icon options={MONTHS} selected={selMoisTests} onChange={setSelMoisTests}/>}<ResizeHandle colId="tests" nextColId={nextVisible("tests")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("finprod")&&<th style={thBase}>Fin prod {setSelMoisFinProd&&<DropFilter label="" icon options={MONTHS} selected={selMoisFinProd} onChange={setSelMoisFinProd}/>}<ResizeHandle colId="finprod" nextColId={nextVisible("finprod")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("depart")&&<th style={thBase}>Départ {setSelMoisDepart&&<DropFilter label="" icon options={MONTHS} selected={selMoisDepart} onChange={setSelMoisDepart}/>}<ResizeHandle colId="depart" nextColId={nextVisible("depart")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
+        {show("avancement")&&<th style={thBase}>Avancement<ResizeHandle colId="avancement" nextColId={nextVisible("avancement")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
       </tr></thead>
       <tbody>{data.map((r,i)=>{
         const dl=r.depart?diffDays(today,new Date(r.depart)):null;
@@ -510,17 +610,17 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
         const pval=progress[r.pj];
         const meta=getPjMeta(r.pj);
         return(<tr key={i} onClick={()=>setSel(sel===r.pj?null:r.pj)} style={{borderBottom:"1px solid "+T.surface,cursor:"pointer",background:sel===r.pj?T.teal100:T.card,transition:"background .1s"}}>
-          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:17,whiteSpace:"nowrap"}}>{r.pj}</td>
-          {show("projet")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",fontWeight:600}}>{meta.nomProjet}</td>}
-          {show("pays")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><CountryFlag pays={meta.pays} size={13}/> {meta.pays}</span></td>}
-          {show("chef")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap"}}>{initials(meta.chefProjet)}</td>}
-          {show("gamme")&&<td style={{padding:"13px 16px",color:T.ink500,fontSize:16,whiteSpace:"nowrap"}}>{r.gamme}</td>}
-          {show("etat")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap"}}><Badge etat={r.etat}/></td>}
-          {show("arrivee")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
-          {show("tests")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap"}}>{r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}</td>}
-          {show("finprod")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
-          {show("depart")&&<td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:17,whiteSpace:"nowrap"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
-          {show("avancement")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap"}}>
+          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.pj}</td>
+          {show("projet")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet}</td>}
+          {show("pays")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><CountryFlag pays={meta.pays} size={13}/> {meta.pays}</span></td>}
+          {show("chef")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{initials(meta.chefProjet)}</td>}
+          {show("gamme")&&<td style={{padding:"13px 16px",color:T.ink500,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.gamme}</td>}
+          {show("etat")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap",overflow:"hidden"}}><Badge etat={r.etat}/></td>}
+          {show("arrivee")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
+          {show("tests")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}</td>}
+          {show("finprod")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
+          {show("depart")&&<td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
+          {show("avancement")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap",overflow:"hidden"}}>
             {pval!=null?<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:48,background:T.surfaceAlt,borderRadius:5,height:7,overflow:"hidden"}}><div style={{width:pval+"%",height:"100%",background:pval>=100?T.emerald500:pval>=50?T.teal500:T.amber500}}/></div><span style={{fontSize:15,fontWeight:700,color:T.ink700}}>{pval}%</span></div>
             :<span style={{color:T.ink300}}>—</span>}
           </td>}
@@ -552,9 +652,10 @@ function getWeekStatus(r,weekStart,weekEnd){
   if(dp&&dp<weekStart)return null; // déjà parti, rien à afficher
 
   const within=d=>d&&d>=weekStart&&d<weekEnd;
+  const overlaps=(s,e)=>s&&e&&s<weekEnd&&e>=weekStart;
   const milestones=[];
   if(within(a))milestones.push("Arrivée");
-  if(within(t1)||within(t2))milestones.push("Tests");
+  if(within(t1)||within(t2)||overlaps(t1,t2))milestones.push("Tests");
   if(within(fp))milestones.push("Fin prod");
   if(within(dp))milestones.push("Départ");
 
@@ -566,7 +667,7 @@ function getWeekStatus(r,weekStart,weekEnd){
 }
 const SEGMENT_STYLE={
   "Arrivée":{c:T.teal500,bold:false},
-  "Production":{c:"#fbbf78",bold:false},
+  "Production":{c:"#5eccc9",bold:false},
   "Tests":{c:T.amber500,bold:true},
   "Fin prod":{c:T.emerald500,bold:true},
   "Départ":{c:T.red500,bold:true},
@@ -585,6 +686,10 @@ function CalendarView({data,onSelectPj}){
   const [nDays,setNDays]=useState(14);
   const [anchor,setAnchor]=useState(weekStartOf(today));
   const [dayAnchor,setDayAnchor]=useState(()=>{const d=new Date(today);d.setHours(0,0,0,0);return d;});
+  const scrollRef=React.useRef(null);
+  const topScrollRef=React.useRef(null);
+  const syncFromTop=()=>{if(scrollRef.current&&topScrollRef.current)scrollRef.current.scrollLeft=topScrollRef.current.scrollLeft;};
+  const syncFromBottom=()=>{if(scrollRef.current&&topScrollRef.current)topScrollRef.current.scrollLeft=scrollRef.current.scrollLeft;};
 
   const weeks=useMemo(()=>{
     const out=[];
@@ -643,8 +748,26 @@ function CalendarView({data,onSelectPj}){
       </div>
     </div>
 
-    <div style={{overflowX:"auto"}}>
+    <div ref={topScrollRef} onScroll={syncFromTop} style={{overflowX:"auto",overflowY:"hidden",height:16}}>
+      <div style={{width:210+cols.length*(mode==="week"?92:64),height:1}}/>
+    </div>
+
+    <div ref={scrollRef} onScroll={syncFromBottom} style={{overflowX:"auto"}}>
       <div style={{display:"grid",gridTemplateColumns:"210px repeat("+cols.length+",1fr)",minWidth:210+cols.length*(mode==="week"?92:64)}}>
+        <div style={{padding:"6px 14px",fontSize:11,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}/>
+        {(()=>{
+          // Regroupe les colonnes consécutives par mois pour afficher une bande "Mois Année" au-dessus
+          const groups=[];
+          cols.forEach((c,i)=>{
+            const m=c.getMonth(),y=c.getFullYear();
+            const last=groups[groups.length-1];
+            if(last&&last.m===m&&last.y===y)last.span++;
+            else groups.push({m,y,span:1});
+          });
+          return groups.map((g,gi)=>(
+            <div key={gi} style={{gridColumn:"span "+g.span,padding:"6px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>{MONTHS_FULL[g.m]} {g.y}</div>
+          ));
+        })()}
         <div style={{padding:"9px 14px",fontSize:12,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}>Machine</div>
         {mode==="week"?weeks.map((w,wi)=>(
           <div key={wi} style={{padding:"9px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:wi===todayWeekIdx?T.teal600:T.ink500,background:wi===todayWeekIdx?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>S{weekNum(w)}</div>
@@ -722,8 +845,10 @@ function PinGate({onUnlock}){
   </div>);
 }
 
-function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor}){
+function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved}){
   const [fEtat,setFEtat]=useState(new Set(ALL_ETATS));
+  const [kpiStep,setKpiStep]=useState("depart");
+  const STEP_LABELS={arrivee:"Arrivée",tests:"Tests",finProd:"Fin de production",depart:"Départ"};
   const [fGamme,setFGamme]=useState(new Set(ALL_GAMMES));
   const [tab,setTab]=useState("derives");
   const fd=useMemo(()=>data.filter(r=>fEtat.has(r.etat)&&fGamme.has(r.gamme)),[data,fEtat,fGamme]);
@@ -747,12 +872,92 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
     return{pj:r.pj,gamme:r.gamme,etat:r.etat,hasInitial:!!ini,arrivee:mk("arrivee"),tests:mk("tests"),finProd:mk("finProd"),depart:mk("depart")};
   }),[fd,initialByPJ]);
   const comparable=driftRows.filter(r=>r.hasInitial);
-  const departDeltas=comparable.map(r=>r.depart.delta).filter(d=>d!=null);
-  const lateCount=departDeltas.filter(d=>d>0).length;
-  const onTimeOrEarlyCount=departDeltas.filter(d=>d<=0).length;
-  const avgDelay=departDeltas.length?Math.round(departDeltas.reduce((a,b)=>a+b,0)/departDeltas.length):null;
-  const worstDrifts=[...comparable].filter(r=>r.depart.delta!=null).sort((a,b)=>b.depart.delta-a.depart.delta).slice(0,5);
-  const onTimeRate=departDeltas.length?Math.round((onTimeOrEarlyCount/departDeltas.length)*100):null;
+  const stepDeltas=comparable.map(r=>r[kpiStep].delta).filter(d=>d!=null);
+  const lateCount=stepDeltas.filter(d=>d>0).length;
+  const onTimeOrEarlyCount=stepDeltas.filter(d=>d<=0).length;
+  const avgDelay=stepDeltas.length?Math.round(stepDeltas.reduce((a,b)=>a+b,0)/stepDeltas.length):null;
+  const worstDrifts=[...comparable].filter(r=>r[kpiStep].delta!=null).sort((a,b)=>b[kpiStep].delta-a[kpiStep].delta).slice(0,5);
+  const onTimeRate=stepDeltas.length?Math.round((onTimeOrEarlyCount/stepDeltas.length)*100):null;
+
+  // ── AXE 1 : Promesse vs Réalité ────────────────────────────────
+  // Jours de retard cumulés sur tout le portefeuille comparable (somme, pas moyenne), pour l'étape sélectionnée
+  const totalDelayDays=stepDeltas.filter(d=>d>0).reduce((a,b)=>a+b,0);
+  const totalGainDays=stepDeltas.filter(d=>d<0).reduce((a,b)=>a+Math.abs(b),0);
+  // Occurrences par mois : initial (promesse) vs révisé (réalité), sur le même axe de mois (mois de la date INITIALE), pour l'étape sélectionnée
+  const promiseVsReality=useMemo(()=>{
+    const m={};
+    comparable.forEach(r=>{
+      const step=r[kpiStep];
+      if(!step.ini)return;
+      const mo=MONTHS[new Date(step.ini).getMonth()];
+      if(!m[mo])m[mo]={mois:mo,promis:0,realise:0};
+      m[mo].promis++;
+      const revMo=step.rev?MONTHS[new Date(step.rev).getMonth()]:null;
+      if(revMo===mo)m[mo].realise++;
+    });
+    const order=MONTHS;
+    return order.filter(mo=>m[mo]).map(mo=>m[mo]);
+  },[comparable,kpiStep]);
+
+  // ── AXE 2 : Fiabilité de l'engagement ──────────────────────────
+  const zeroDriftCount=stepDeltas.filter(d=>d===0).length;
+  const reliabilityRate=stepDeltas.length?Math.round((zeroDriftCount/stepDeltas.length)*100):null;
+  const driftBuckets=useMemo(()=>{
+    const buckets=[
+      {label:"À l'heure / avance",min:-Infinity,max:0,c:T.emerald500,n:0},
+      {label:"Léger retard (1-15j)",min:0,max:15,c:T.amber500,n:0},
+      {label:"Retard important (15-30j)",min:15,max:30,c:"#e8821a",n:0},
+      {label:"Retard critique (30j+)",min:30,max:Infinity,c:T.red500,n:0},
+    ];
+    stepDeltas.forEach(d=>{
+      const b=buckets.find(b=>d>b.min&&d<=b.max)||(d<=0?buckets[0]:buckets[buckets.length-1]);
+      if(b)b.n++;
+    });
+    return buckets.filter(b=>b.n>0);
+  },[stepDeltas]);
+
+  // ── AXE 3 : Trajectoire de la dérive (le retard s'aggrave-t-il ou se résorbe-t-il au fil des jalons ?) ─
+  const trajectory=useMemo(()=>{
+    const steps=[["arrivee","Arrivée"],["tests","Tests"],["finProd","Fin prod"],["depart","Départ"]];
+    return steps.map(([k,label])=>{
+      const deltas=comparable.map(r=>r[k].delta).filter(d=>d!=null);
+      const moyenne=deltas.length?Math.round((deltas.reduce((a,b)=>a+b,0)/deltas.length)*10)/10:null;
+      return{jalon:label,moyenne};
+    });
+  },[comparable]);
+
+  // ── Comparaison Initial vs Révisé par PJ — pour l'étape sélectionnée, en barres groupées ─
+  // On exprime les deux dates en "jour de l'année" pour pouvoir les comparer visuellement sur un même axe
+  const yearStart=new Date(today.getFullYear(),0,1);
+  const dayOfYear=d=>Math.round((d-yearStart)/86400000);
+  const pjCompareChart=useMemo(()=>{
+    return comparable.filter(r=>r[kpiStep].ini&&r[kpiStep].rev).map(r=>({
+      pj:r.pj,
+      initial:dayOfYear(new Date(r[kpiStep].ini)),
+      revise:dayOfYear(new Date(r[kpiStep].rev)),
+      delta:r[kpiStep].delta,
+      dateIni:r[kpiStep].ini,
+      dateRev:r[kpiStep].rev,
+    })).sort((a,b)=>a.initial-b.initial);
+  },[comparable,kpiStep]);
+
+  // ── Durée totale de production (Arrivée → Départ) : initial vs révisé ──
+  const dureeCompare=useMemo(()=>{
+    const rows=comparable.filter(r=>r.arrivee.ini&&r.depart.ini&&r.arrivee.rev&&r.depart.rev).map(r=>({
+      pj:r.pj,
+      dureeIni:diffDays(new Date(r.arrivee.ini),new Date(r.depart.ini)),
+      dureeRev:diffDays(new Date(r.arrivee.rev),new Date(r.depart.rev)),
+    }));
+    const avgIni=rows.length?Math.round(rows.reduce((a,b)=>a+b.dureeIni,0)/rows.length):null;
+    const avgRev=rows.length?Math.round(rows.reduce((a,b)=>a+b.dureeRev,0)/rows.length):null;
+    return{rows,avgIni,avgRev,ecart:avgIni!=null&&avgRev!=null?avgRev-avgIni:null};
+  },[comparable]);
+
+  // ── Tableau détaillé : écart sur les 4 jalons pour chaque PJ comparable ──
+  const detailByPJTable=comparable.map(r=>({
+    pj:r.pj,gamme:r.gamme,
+    dArrivee:r.arrivee.delta,dTests:r.tests.delta,dFinProd:r.finProd.delta,dDepart:r.depart.delta,
+  })).sort((a,b)=>(b.dDepart||0)-(a.dDepart||0));
 
   // ── Axe 1 : dérive moyenne par gamme ──────────────────────────
   const driftByGamme=useMemo(()=>{
@@ -830,10 +1035,22 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
   // ── Nouveaux KPI : volumétrie, durée moyenne, charge mensuelle ─
   const dureeProdValues=fd.map(r=>r.arrivee&&r.depart?diffDays(new Date(r.arrivee),new Date(r.depart)):null).filter(d=>d!=null);
   const avgDureeProd=dureeProdValues.length?Math.round(dureeProdValues.reduce((a,b)=>a+b,0)/dureeProdValues.length):null;
-  const chargeByMonth=useMemo(()=>{
+  const chargeByMonthMulti=useMemo(()=>{
+    const steps=[["arrivee","Arrivée",T.teal500],["tests","Tests",T.amber500],["finProd","Fin prod",T.emerald500],["depart","Départ",T.red500]];
     const m={};
-    fd.forEach(r=>{if(!r.depart)return;const mo=MONTHS[new Date(r.depart).getMonth()];m[mo]=(m[mo]||0)+1;});
-    return MONTHS.filter(mo=>m[mo]).map(mo=>({mois:mo,n:m[mo]}));
+    MONTHS.forEach(mo=>{m[mo]={mois:mo};steps.forEach(([k,l])=>{m[mo][l]=0;});m[mo]["Production"]=0;});
+    fd.forEach(r=>{
+      steps.forEach(([k,l])=>{if(r[k]){const mo=MONTHS[new Date(r[k]).getMonth()];m[mo][l]++;}});
+      // Production : la machine est en fabrication ce mois-là si le mois chevauche [arrivée, fin prod]
+      if(r.arrivee&&r.finProd){
+        const start=new Date(r.arrivee),end=new Date(r.finProd);
+        MONTHS.forEach((mo,mi)=>{
+          const monthStart=new Date(start.getFullYear(),mi,1),monthEnd=new Date(start.getFullYear(),mi+1,1);
+          if(start<monthEnd&&end>=monthStart)m[mo]["Production"]++;
+        });
+      }
+    });
+    return MONTHS.filter(mo=>Object.values(m[mo]).some(v=>typeof v==="number"&&v>0)).map(mo=>m[mo]);
   },[fd]);
   const countByPays=useMemo(()=>{
     const m={};
@@ -913,16 +1130,21 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
           </ResponsiveContainer>
         </div>}
 
-        {chargeByMonth.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Charge prévisionnelle par mois</div>
-          <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Nombre de machines partant chaque mois</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chargeByMonth}>
+        {chargeByMonthMulti.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd,gridColumn:"1 / -1"}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Charge prévisionnelle par étape et par mois</div>
+          <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Nombre de machines à chaque étape chaque mois — Production = machines en fabrication ce mois-là</div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chargeByMonthMulti}>
               <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
               <XAxis dataKey="mois" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
               <YAxis allowDecimals={false} tick={{fontSize:12,fill:T.ink500}}/>
               <Tooltip contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
-              <Bar dataKey="n" radius={[6,6,0,0]} fill={T.teal500}/>
+              <Legend wrapperStyle={{fontSize:13}}/>
+              <Bar dataKey="Arrivée" fill={T.teal500} radius={[4,4,0,0]}/>
+              <Bar dataKey="Production" fill="#5eccc9" radius={[4,4,0,0]}/>
+              <Bar dataKey="Tests" fill={T.amber500} radius={[4,4,0,0]}/>
+              <Bar dataKey="Fin prod" fill={T.emerald500} radius={[4,4,0,0]}/>
+              <Bar dataKey="Départ" fill={T.red500} radius={[4,4,0,0]}/>
             </BarChart>
           </ResponsiveContainer>
         </div>}
@@ -970,6 +1192,118 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
           ))}
         </div>
 
+        <div style={{background:T.card,borderRadius:14,padding:"18px 20px",boxShadow:T.shadowMd,border:"1px solid "+T.line}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:2}}>
+            <div>
+              <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:21,color:T.navy900}}>📊 Vue CODIR — Promesse vs Réalité</div>
+              <div style={{fontSize:14,color:T.ink500}}>Impact cumulé de l'écart entre le planning initial et le planning révisé</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,background:T.surface,borderRadius:10,padding:"6px 10px"}}>
+              <span style={{fontSize:13,color:T.ink500,fontWeight:600}}>Étape analysée :</span>
+              <div style={{display:"flex",gap:4}}>
+                {Object.entries(STEP_LABELS).map(([k,l])=><button key={k} onClick={()=>setKpiStep(k)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:kpiStep===k?T.teal500:T.card,color:kpiStep===k?"#fff":T.ink700,fontSize:13,fontWeight:600,cursor:"pointer"}}>{l}</button>)}
+              </div>
+            </div>
+          </div>
+          <div style={{marginBottom:16}}/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:18}}>
+            {[[totalDelayDays+"j","Retard cumulé généré ("+STEP_LABELS[kpiStep]+")",T.red500],[totalGainDays+"j","Avance cumulée gagnée",T.emerald500],[reliabilityRate==null?"—":reliabilityRate+"%","PJ tenus à la date promise",T.teal500],[dureeCompare.ecart==null?"—":(dureeCompare.ecart>0?"+":"")+dureeCompare.ecart+"j","Écart durée moy. production",dureeCompare.ecart>0?T.red500:T.emerald500]].map(([v,l,c])=>(
+              <div key={l} style={{background:T.surface,borderRadius:10,padding:"12px 16px",borderTop:"3px solid "+c}}>
+                <div style={{fontFamily:T.fontDisplay,fontSize:28,fontWeight:700,color:T.navy800}}>{v}</div>
+                <div style={{fontSize:13,color:T.ink500,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {promiseVsReality.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:8}}>{STEP_LABELS[kpiStep]} promis (initial) vs maintenus dans le mois (révisé)</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={promiseVsReality}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
+                <XAxis dataKey="mois" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
+                <YAxis allowDecimals={false} tick={{fontSize:12,fill:T.ink500}}/>
+                <Tooltip contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+                <Legend wrapperStyle={{fontSize:13}}/>
+                <Line type="monotone" dataKey="promis" name="Promis (initial)" stroke={T.ink300} strokeWidth={2.5} strokeDasharray="5 4" dot={{r:4,fill:T.ink300}}/>
+                <Line type="monotone" dataKey="realise" name="Maintenu dans le mois" stroke={T.teal500} strokeWidth={3} dot={{r:5,fill:T.teal500}}/>
+              </LineChart>
+            </ResponsiveContainer>
+          </div>}
+
+          {pjCompareChart.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:4}}>Date de {STEP_LABELS[kpiStep].toLowerCase()} par PJ — Initial vs Révisé</div>
+            <div style={{fontSize:12,color:T.ink300,marginBottom:8}}>Chaque paire de barres montre le glissement réel de la date, PJ par PJ</div>
+            <ResponsiveContainer width="100%" height={Math.max(200,pjCompareChart.length*32)}>
+              <BarChart data={pjCompareChart} layout="vertical" margin={{left:10,right:20}}>
+                <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
+                <XAxis type="number" tick={{fontSize:11,fill:T.ink500}} tickFormatter={v=>{const d=new Date(yearStart);d.setDate(d.getDate()+v);return MONTHS[d.getMonth()];}}/>
+                <YAxis type="category" dataKey="pj" width={90} tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
+                <Tooltip formatter={(v,n,p)=>{const isIni=n==="initial";return[fmt(new Date(isIni?p.payload.dateIni:p.payload.dateRev)),isIni?"Initial":"Révisé"];}} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+                <Legend wrapperStyle={{fontSize:13}} formatter={v=>v==="initial"?"Initial":"Révisé"}/>
+                <Bar dataKey="initial" fill={T.ink300} radius={[0,4,4,0]}/>
+                <Bar dataKey="revise" fill={T.teal500} radius={[0,4,4,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>}
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:14,marginBottom:14}}>
+            {driftBuckets.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:8}}>Répartition par sévérité du retard</div>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={driftBuckets} layout="vertical" margin={{left:10,right:20}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
+                  <XAxis type="number" allowDecimals={false} tick={{fontSize:11,fill:T.ink500}}/>
+                  <YAxis type="category" dataKey="label" width={140} tick={{fontSize:12,fill:T.ink700}}/>
+                  <Tooltip contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+                  <Bar dataKey="n" radius={[0,6,6,0]}>
+                    {driftBuckets.map((d,i)=><Cell key={i} fill={d.c}/>)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>}
+
+            {trajectory.some(t=>t.moyenne!=null)&&<div style={{background:T.surface,borderRadius:10,padding:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:8}}>Trajectoire de la dérive le long de la chaîne</div>
+              <div style={{fontSize:12,color:T.ink300,marginBottom:6}}>Le retard s'aggrave-t-il ou se résorbe-t-il entre l'arrivée et le départ ?</div>
+              <ResponsiveContainer width="100%" height={150}>
+                <LineChart data={trajectory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={T.line}/>
+                  <XAxis dataKey="jalon" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
+                  <YAxis tick={{fontSize:11,fill:T.ink500}}/>
+                  <Tooltip contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+                  <Line type="monotone" dataKey="moyenne" stroke={T.teal500} strokeWidth={3} dot={{r:5,fill:T.teal500}}/>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>}
+
+            {dureeCompare.rows.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:4}}>Durée de production : initial vs révisé</div>
+              <div style={{fontSize:12,color:T.ink300,marginBottom:8}}>Moyenne sur le portefeuille comparable (Arrivée → Départ)</div>
+              <div style={{display:"flex",gap:20,alignItems:"baseline"}}>
+                <div><div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:T.ink500}}>{dureeCompare.avgIni}j</div><div style={{fontSize:12,color:T.ink300}}>Initial</div></div>
+                <div style={{fontSize:20,color:T.ink300}}>→</div>
+                <div><div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:dureeCompare.ecart>0?T.red500:T.emerald500}}>{dureeCompare.avgRev}j</div><div style={{fontSize:12,color:T.ink300}}>Révisé</div></div>
+              </div>
+            </div>}
+          </div>
+
+          {detailByPJTable.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14,overflow:"auto"}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.navy800,marginBottom:8}}>Détail par PJ — écart (jours) sur chaque jalon</div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{borderBottom:"1px solid "+T.line}}>
+                {["N° PJ","Gamme","Arrivée","Tests","Fin prod","Départ"].map(h=><th key={h} style={{padding:"6px 10px",textAlign:h==="N° PJ"||h==="Gamme"?"left":"center",fontWeight:700,color:T.ink500,fontSize:12,textTransform:"uppercase"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{detailByPJTable.map(r=>(
+                <tr key={r.pj} style={{borderBottom:"1px solid "+T.surfaceAlt}}>
+                  <td style={{padding:"7px 10px",fontWeight:700,color:T.teal600}}>{r.pj}</td>
+                  <td style={{padding:"7px 10px",color:T.ink500}}>{r.gamme}</td>
+                  {[r.dArrivee,r.dTests,r.dFinProd,r.dDepart].map((d,i)=><td key={i} style={{padding:"7px 10px",textAlign:"center",fontWeight:700,color:d==null?T.ink300:d>0?T.red500:d<0?T.emerald500:T.ink500}}>{d==null?"—":(d>0?"+":"")+d}</td>)}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>}
+        </div>
+
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:14}}>
           {driftByGamme.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
             <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Dérive moyenne par gamme</div>
@@ -1003,45 +1337,30 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
             </ResponsiveContainer>
           </div>}
 
-          {driftByMonth.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
+          {driftTrend.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
             <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Dérive moyenne par mois de départ</div>
-            <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Périodes où les retards sont les plus fréquents</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={driftByMonth}>
-                <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
-                <XAxis dataKey="mois" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
-                <YAxis tick={{fontSize:12,fill:T.ink500}}/>
-                <Tooltip formatter={(v,n,p)=>[v+"j (n="+p.payload.n+")","Dérive moyenne"]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
-                <Bar dataKey="moyenne" radius={[6,6,0,0]}>
-                  {driftByMonth.map((d,i)=><Cell key={i} fill={d.moyenne>0?T.red500:T.emerald500}/>)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>}
-
-          {driftTrend.length>1&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-            <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:4}}>Tendance de la dérive dans le temps</div>
-            <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>La situation s'améliore-t-elle ou se dégrade-t-elle mois après mois ?</div>
+            <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Périodes où les retards sont les plus fréquents — la situation s'améliore-t-elle dans le temps ?</div>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={driftTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
                 <XAxis dataKey="mois" tick={{fontSize:12,fill:T.ink700,fontWeight:600}}/>
                 <YAxis tick={{fontSize:12,fill:T.ink500}}/>
                 <Tooltip formatter={(v,n,p)=>[v+"j (n="+p.payload.n+")","Dérive moyenne"]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
-                <Line type="monotone" dataKey="moyenne" stroke={T.teal500} strokeWidth={3} dot={{r:5,fill:T.teal500}}/>
+                <Line type="monotone" dataKey="moyenne" stroke={T.violet500} strokeWidth={3} dot={({cx,cy,payload})=><circle key={payload.mois} cx={cx} cy={cy} r={5} fill={payload.moyenne>0?T.red500:T.emerald500}/>}/>
               </LineChart>
             </ResponsiveContainer>
           </div>}
+
         </div>
 
-        {worstDrifts.length>0&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.navy800,marginBottom:10}}>Top dérives — Départ (vs planning initial)</div>
-          {worstDrifts.map(r=>{const d=r.depart.delta;const c=d>0?T.red500:d<0?T.emerald500:T.ink500;return(
-            <div key={r.pj} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid "+T.surface}}>
-              <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:100}}>{r.pj}</span>
-              <span style={{color:T.ink300,fontSize:14,minWidth:60}}>{r.gamme}</span>
-              <span style={{fontSize:15,color:T.ink500}}>{fmt(r.depart.ini?new Date(r.depart.ini):null)} → {fmt(r.depart.rev?new Date(r.depart.rev):null)}</span>
-              <span style={{marginLeft:"auto",fontWeight:800,fontSize:17,color:c}}>{d>0?"+":""}{d}j</span>
+        {worstDrifts.length>0&&<div style={{background:T.card,borderRadius:12,padding:14,boxShadow:T.shadowMd,maxWidth:520}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:16,color:T.navy800,marginBottom:8}}>Top 5 dérives — {STEP_LABELS[kpiStep]} (vs planning initial)</div>
+          {worstDrifts.map(r=>{const d=r[kpiStep].delta;const c=d>0?T.red500:d<0?T.emerald500:T.ink500;return(
+            <div key={r.pj} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid "+T.surface}}>
+              <span style={{fontWeight:700,color:T.teal600,fontSize:14,minWidth:85}}>{r.pj}</span>
+              <span style={{color:T.ink300,fontSize:12,minWidth:50}}>{r.gamme}</span>
+              <span style={{fontSize:13,color:T.ink500}}>{fmt(r[kpiStep].ini?new Date(r[kpiStep].ini):null)} → {fmt(r[kpiStep].rev?new Date(r[kpiStep].rev):null)}</span>
+              <span style={{marginLeft:"auto",fontWeight:800,fontSize:15,color:c}}>{d>0?"+":""}{d}j</span>
             </div>
           );})}
         </div>}
@@ -1085,7 +1404,15 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
       </div>
     </div>}
     {tab==="avancement"&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
-      <div style={{fontSize:16,color:T.ink500,marginBottom:14}}>Cliquer sur la barre ou saisir le %</div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+        <span style={{fontSize:16,color:T.ink500}}>Cliquer sur la barre ou saisir le %</span>
+        <button onClick={saveProgress} disabled={savingProgress} style={{marginLeft:"auto",padding:"9px 18px",borderRadius:10,border:"none",background:progressSaved?T.emerald500:T.teal500,color:"#fff",fontSize:15,fontWeight:700,cursor:savingProgress?"default":"pointer",opacity:savingProgress?0.7:1,display:"flex",alignItems:"center",gap:7}}>
+          {progressSaved?"✓ Enregistré":savingProgress?"Enregistrement...":"💾 Valider l'avancement"}
+        </button>
+      </div>
+      <div style={{fontSize:13,color:T.amber600,background:T.amber100,padding:"8px 12px",borderRadius:8,marginBottom:14}}>
+        ⚠️ Les modifications restent temporaires jusqu'au clic sur « Valider » — sans validation, elles seront perdues si la page est actualisée.
+      </div>
       {fd.map(r=>{
         const pv=progress[r.pj]!=null?progress[r.pj]:r.etat==="SHIPPED"?100:0;
         return(<div key={r.pj} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid "+T.surface}}>
@@ -1098,6 +1425,11 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
           <span style={{fontSize:15,color:T.ink500,fontWeight:500}}>%</span>
         </div>);
       })}
+      <div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}>
+        <button onClick={saveProgress} disabled={savingProgress} style={{padding:"9px 18px",borderRadius:10,border:"none",background:progressSaved?T.emerald500:T.teal500,color:"#fff",fontSize:15,fontWeight:700,cursor:savingProgress?"default":"pointer",opacity:savingProgress?0.7:1}}>
+          {progressSaved?"✓ Enregistré":savingProgress?"Enregistrement...":"💾 Valider l'avancement"}
+        </button>
+      </div>
     </div>}
     {tab==="statut"&&<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
       <div style={{fontSize:16,color:T.ink500,marginBottom:16}}>
@@ -1147,7 +1479,10 @@ function ImportButton({onImport, busy, label, icon, accent, helpText, warnText, 
         const wb=window.XLSX.read(buf,{type:"array"});
         const ws=wb.Sheets[wb.SheetNames[0]];
         const rows=window.XLSX.utils.sheet_to_json(ws,{header:1,raw:false});
-        const parsed=parseMSProjectRows(rows);
+        // Feuille optionnelle "Table_affectation" : charge de travail par tâche/ressource (Atelier/Autom)
+        const affSheetName=wb.SheetNames.find(n=>n.toLowerCase().includes("affectation"));
+        const affRows=affSheetName?window.XLSX.utils.sheet_to_json(wb.Sheets[affSheetName],{header:1,raw:false}):null;
+        const parsed=parseMSProjectRows(rows,affRows);
         if(!parsed||parsed.length===0){setErr("Aucun PJ reconnu. Vérifiez les colonnes Nom / Début / Niveau hiérarchique.");return;}
         if(proceedImport(parsed))setOpen(false);
       } else {
@@ -1247,6 +1582,7 @@ export default function App(){
       if(snap.exists()){
         const d = snap.data();
         setEtatChoice(d.etatChoice || {});
+        setProgress(d.progress || {});
       }
     }, (err)=>{
       console.error("Erreur Firestore (overrides):", err);
@@ -1263,6 +1599,21 @@ export default function App(){
       alert("Erreur lors de l'enregistrement : " + e.message);
     }
   },[etatChoice]);
+
+  const [savingProgress,setSavingProgress]=useState(false);
+  const [progressSaved,setProgressSaved]=useState(false);
+  const saveProgress=useCallback(async ()=>{
+    setSavingProgress(true);
+    try{
+      await setDoc(OVERRIDES_DOC_REF(), { progress }, { merge:true });
+      setProgressSaved(true);
+      setTimeout(()=>setProgressSaved(false),2500);
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement : " + e.message);
+    }
+    setSavingProgress(false);
+  },[progress]);
 
   const handleImport=useCallback(async rows=>{
     setImporting(true);
@@ -1317,8 +1668,9 @@ export default function App(){
   const VIEWS=[{id:"table",l:"📋 Liste"},{id:"gantt",l:"📊 Gantt"},{id:"calendar",l:"📅 Calendrier"}];
 
   return(<div style={{fontFamily:T.font,fontSize:17,background:T.surface,minHeight:"100vh",padding:20,color:T.ink900}}>
+    <style>{"*{box-sizing:border-box;}"}</style>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Abel&display=swap" rel="stylesheet"/>
     <div style={{background:T.card,borderRadius:18,padding:"20px 26px",marginBottom:22,color:T.ink900,display:"flex",alignItems:"center",gap:18,flexWrap:"wrap",boxShadow:T.shadowMd,borderBottom:"3px solid "+T.teal500}}>
       <img src={LOGO_B64} alt="ENOGIA" style={{height:64,objectFit:"contain"}}/>
       <div style={{borderLeft:"1px solid "+T.line,paddingLeft:18}}>
@@ -1359,8 +1711,8 @@ export default function App(){
               <span style={{fontFamily:T.fontDisplay,fontWeight:700,color:T.navy800,fontSize:21}}>🔓 Espace Manager</span>
               <button onClick={()=>setPinOk(false)} style={{padding:"6px 14px",borderRadius:9,border:"1px solid "+T.line,background:T.card,fontSize:15,cursor:"pointer",color:T.ink700,fontWeight:600}}>Verrouiller</button>
             </div>
-            <ManagerPanel data={data} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}
-              etatChoice={etatChoice} setEtatFor={setEtatFor}/>
+            <ManagerPanel data={dataWithOverrides} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}
+              etatChoice={etatChoice} setEtatFor={setEtatFor} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(
