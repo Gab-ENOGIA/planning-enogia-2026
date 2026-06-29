@@ -90,6 +90,13 @@ const COUNTRY_ISO={
   "Singapore":"sg","Norvège":"no","Islande":"is","Kenya":"ke",
   "FR-La Réunion":"re","Japon":"jp",
 };
+function PersonIcon({size,color}){
+  const s=size||14;
+  return(<svg width={s} height={s} viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}>
+    <circle cx="12" cy="7.5" r="4.5" fill={color||"currentColor"}/>
+    <path d="M4 21c0-4.42 3.58-8 8-8s8 3.58 8 8" fill={color||"currentColor"}/>
+  </svg>);
+}
 function CountryFlag({pays,size}){
   const iso=COUNTRY_ISO[pays];
   const h=size||14;
@@ -356,7 +363,7 @@ function GanttView({data,progress,df}){
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:16,overflow:"hidden"}}>
               <CountryFlag pays={meta.pays} size={11}/>
-              <span style={{fontSize:13,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.nomProjet}</span>
+              <span style={{fontSize:13,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.nomProjet} <span style={{fontStyle:"italic",fontSize:11,color:T.ink300}}>({r.gamme})</span></span>
             </div>
           </div>);
         })}
@@ -423,7 +430,7 @@ function GanttView({data,progress,df}){
   </div>);
 }
 
-function ProjectModal({pj,data,df,onClose}){
+function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComment}){
   const r=data.find(x=>x.pj===pj);
   if(!r)return null;
   const meta=getPjMeta(pj);
@@ -456,7 +463,7 @@ function ProjectModal({pj,data,df,onClose}){
       <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
         <Badge etat={r.etat}/>
         <span style={{fontSize:15,color:T.ink500,alignSelf:"center"}}>{r.gamme}</span>
-        {r.clientPresence?.present&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:14,background:T.violet100,color:T.violet600,borderRadius:7,padding:"4px 10px",fontWeight:700}}>👤 Client/NOBO présent{r.clientPresence.date?" — "+fmt(new Date(r.clientPresence.date)):""}</span>}
+        {r.clientPresence?.present&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:14,background:"#fde4e1",color:T.red500,borderRadius:7,padding:"4px 10px",fontWeight:700}}><PersonIcon size={14} color={T.red500}/> Client/NOBO présent{r.clientPresence.date?" — "+fmt(new Date(r.clientPresence.date)):""}</span>}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:24}}>
@@ -464,7 +471,7 @@ function ProjectModal({pj,data,df,onClose}){
           <div key={ph.k} style={{background:T.surface,borderRadius:10,padding:"11px 14px",borderTop:"3px solid "+ph.c,position:"relative"}}>
             <div style={{color:T.ink500,fontSize:13,fontWeight:600,textTransform:"uppercase",letterSpacing:".03em"}}>{ph.t}</div>
             <div style={{fontWeight:700,color:T.navy800,fontSize:19,marginTop:3}}>{d?fmtMode(d,df):"—"}</div>
-            {showPresence&&<span title="Client/NOBO présent" style={{position:"absolute",top:-8,right:-8,fontSize:15,background:T.violet100,border:"1.5px solid "+T.violet600,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center"}}>👤</span>}
+            {showPresence&&<span title="Client/NOBO présent" style={{position:"absolute",top:-8,right:-8,fontSize:15,background:"#fde4e1",border:"1.5px solid "+T.red500,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center"}}><PersonIcon size={13} color={T.red500}/></span>}
           </div>
         );})}
       </div>
@@ -497,6 +504,148 @@ function ProjectModal({pj,data,df,onClose}){
 
       <div style={{display:"flex",gap:14,marginTop:18,paddingTop:14,borderTop:"1px solid "+T.line,flexWrap:"wrap"}}>
         {PHASES.map(ph=><span key={ph.k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><span style={{width:13,height:13,borderRadius:4,background:ph.c}}/><span style={{color:T.ink500}}>{ph.t}</span></span>)}
+      </div>
+
+      <ProjectComments pj={pj} comments={comments?.[pj]||[]} addComment={addComment} deleteComment={deleteComment}/>
+    </div>
+  </div>);
+}
+
+function ProjectComments({pj,comments,addComment,deleteComment}){
+  const [author,setAuthor]=useState("");
+  const [text,setText]=useState("");
+  const [err,setErr]=useState("");
+  const [deleteTarget,setDeleteTarget]=useState(null); // index original du commentaire à supprimer
+  const [pinInput,setPinInput]=useState("");
+  const submit=async ()=>{
+    if(!author.trim()){setErr("Le nom est obligatoire pour publier un commentaire.");return;}
+    if(!text.trim())return;
+    setErr("");
+    const ok=await addComment(pj,author,text);
+    if(ok)setText("");
+  };
+  const confirmDelete=async ()=>{
+    const ok=await deleteComment(pj,deleteTarget,pinInput);
+    if(ok){setDeleteTarget(null);setPinInput("");}
+  };
+  const withIndex=comments.map((c,i)=>({...c,_idx:i}));
+  const sorted=[...withIndex].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return(<div style={{marginTop:20,paddingTop:16,borderTop:"1px solid "+T.line}}>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.navy800,marginBottom:10}}>💬 Commentaires ({comments.length})</div>
+    <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+      <input type="text" value={author} onChange={e=>{setAuthor(e.target.value);setErr("");}} placeholder="Votre nom (obligatoire)" maxLength={40}
+        style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+(err?T.red500:T.line),fontSize:14,fontFamily:T.font,color:T.ink700}}/>
+      {err&&<span style={{fontSize:13,color:T.red500}}>{err}</span>}
+      <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Ajouter un commentaire..." rows={3} maxLength={1000}
+        style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,resize:"vertical"}}/>
+      <button onClick={submit} disabled={!text.trim()} style={{alignSelf:"flex-end",padding:"8px 18px",borderRadius:8,border:"none",background:text.trim()?T.teal500:T.surfaceAlt,color:text.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:text.trim()?"pointer":"default"}}>Publier</button>
+    </div>
+    {sorted.length>0&&<div style={{display:"flex",flexDirection:"column",gap:10,maxHeight:300,overflowY:"auto"}}>
+      {sorted.map(c=>(
+        <div key={c._idx} style={{background:T.surface,borderRadius:10,padding:"10px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4,gap:8}}>
+            <span style={{fontWeight:700,color:T.teal600,fontSize:14}}>{c.author}</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:T.ink300}}>{new Date(c.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+              <button onClick={()=>{setDeleteTarget(c._idx);setPinInput("");}} title="Supprimer" style={{background:"none",border:"none",color:T.ink300,cursor:"pointer",fontSize:14,padding:0}}>✕</button>
+            </div>
+          </div>
+          <div style={{fontSize:14,color:T.ink700,whiteSpace:"pre-wrap"}}>{c.text}</div>
+          {deleteTarget===c._idx&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+T.line,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} placeholder="Code Manager" style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,width:120}}/>
+            <button onClick={confirmDelete} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.red500,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer la suppression</button>
+            <button onClick={()=>setDeleteTarget(null)} style={{padding:"6px 12px",borderRadius:7,border:"1px solid "+T.line,background:T.card,color:T.ink700,fontSize:13,cursor:"pointer"}}>Annuler</button>
+          </div>}
+        </div>
+      ))}
+    </div>}
+  </div>);
+}
+
+function CommentsView({data,comments,addComment,deleteComment}){
+  const [author,setAuthor]=useState("");
+  const [selectedPj,setSelectedPj]=useState("");
+  const [text,setText]=useState("");
+  const [filterPj,setFilterPj]=useState("");
+  const [err,setErr]=useState("");
+  const [deleteTarget,setDeleteTarget]=useState(null); // {pj,idx}
+  const [pinInput,setPinInput]=useState("");
+
+  const allComments=useMemo(()=>{
+    const out=[];
+    Object.entries(comments).forEach(([pj,list])=>list.forEach((c,idx)=>out.push({...c,pj,_idx:idx})));
+    return out.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  },[comments]);
+  const filtered=filterPj?allComments.filter(c=>c.pj===filterPj):allComments;
+
+  const submit=async ()=>{
+    if(!author.trim()){setErr("Le nom est obligatoire pour publier un commentaire.");return;}
+    if(!text.trim()||!selectedPj)return;
+    setErr("");
+    const ok=await addComment(selectedPj,author,text);
+    if(ok)setText("");
+  };
+  const confirmDelete=async ()=>{
+    const ok=await deleteComment(deleteTarget.pj,deleteTarget.idx,pinInput);
+    if(ok){setDeleteTarget(null);setPinInput("");}
+  };
+
+  return(<div style={{display:"flex",flexDirection:"column",gap:16,fontFamily:T.font}}>
+    <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
+      <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:21,color:T.navy900,marginBottom:14}}>💬 Ajouter un commentaire</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>N° PJ concerné</label>
+          <select value={selectedPj} onChange={e=>setSelectedPj(e.target.value)} style={{padding:"9px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,background:T.surface,width:"100%"}}>
+            <option value="">— Choisir un PJ —</option>
+            {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>Votre nom (obligatoire)</label>
+          <input type="text" value={author} onChange={e=>{setAuthor(e.target.value);setErr("");}} placeholder="Votre nom" maxLength={40}
+            style={{padding:"9px 12px",borderRadius:8,border:"1px solid "+(err?T.red500:T.line),fontSize:15,fontFamily:T.font,color:T.ink700,width:"100%"}}/>
+        </div>
+      </div>
+      {err&&<div style={{fontSize:13,color:T.red500,marginBottom:8}}>{err}</div>}
+      <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Ajouter un commentaire..." rows={3} maxLength={1000}
+        style={{padding:"9px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,resize:"vertical",width:"100%",marginBottom:10}}/>
+      <div style={{display:"flex",justifyContent:"flex-end"}}>
+        <button onClick={submit} disabled={!text.trim()||!selectedPj} style={{padding:"9px 20px",borderRadius:9,border:"none",background:text.trim()&&selectedPj?T.teal500:T.surfaceAlt,color:text.trim()&&selectedPj?"#fff":T.ink300,fontSize:15,fontWeight:700,cursor:text.trim()&&selectedPj?"pointer":"default"}}>Publier</button>
+      </div>
+    </div>
+
+    <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:14}}>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.navy900}}>Tous les commentaires ({filtered.length})</div>
+        <select value={filterPj} onChange={e=>setFilterPj(e.target.value)} style={{padding:"7px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,background:T.surface}}>
+          <option value="">Tous les PJ</option>
+          {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
+        </select>
+      </div>
+      {filtered.length===0&&<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"30px 0"}}>Aucun commentaire pour l'instant.</div>}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {filtered.map(c=>{
+          const isTarget=deleteTarget&&deleteTarget.pj===c.pj&&deleteTarget.idx===c._idx;
+          return(<div key={c.pj+"-"+c._idx} style={{background:T.surface,borderRadius:10,padding:"12px 16px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5,flexWrap:"wrap",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontWeight:700,color:T.teal600,fontSize:15}}>{c.pj}</span>
+                <span style={{fontWeight:700,color:T.navy800,fontSize:14}}>{c.author}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:12,color:T.ink300}}>{new Date(c.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                <button onClick={()=>{setDeleteTarget({pj:c.pj,idx:c._idx});setPinInput("");}} title="Supprimer" style={{background:"none",border:"none",color:T.ink300,cursor:"pointer",fontSize:14,padding:0}}>✕</button>
+              </div>
+            </div>
+            <div style={{fontSize:14,color:T.ink700,whiteSpace:"pre-wrap"}}>{c.text}</div>
+            {isTarget&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+T.line,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+              <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} placeholder="Code Manager" style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,width:120}}/>
+              <button onClick={confirmDelete} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.red500,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer la suppression</button>
+              <button onClick={()=>setDeleteTarget(null)} style={{padding:"6px 12px",borderRadius:7,border:"1px solid "+T.line,background:T.card,color:T.ink700,fontSize:13,cursor:"pointer"}}>Annuler</button>
+            </div>}
+          </div>);
+        })}
       </div>
     </div>
   </div>);
@@ -571,7 +720,7 @@ function ResizeHandle({colId,nextColId,colWidths,setColWidths}){
   };
   return <div onMouseDown={onMouseDown} style={{position:"absolute",right:-3,top:0,bottom:0,width:6,cursor:"col-resize",zIndex:3}}/>;
 }
-function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart}){
+function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart,comments,addComment,deleteComment}){
   const [sel,setSel]=useState(null);
   const [hiddenCols,setHiddenCols]=useState(new Set());
   const [colWidths,setColWidths]=useState(DEFAULT_COL_WIDTHS_PCT);
@@ -585,7 +734,7 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
     <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.line,display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
       <ColumnPicker hidden={hiddenCols} setHidden={setHiddenCols}/>
     </div>
-    <div style={{overflow:"auto"}}>
+    <div style={{overflowX:"auto",overflowY:"visible"}}>
     <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
       <colgroup>
         <col style={{width:cw("pj")}}/>
@@ -600,7 +749,7 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
         {show("depart")&&<col style={{width:cw("depart")}}/>}
         {show("avancement")&&<col style={{width:cw("avancement")}}/>}
       </colgroup>
-      <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line}}>
+      <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line,position:"sticky",top:0,zIndex:10}}>
         <th style={thBase}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs||new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths}/></th>
         {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets||new Set(allProjets)} onChange={setSelProjets}/>}<ResizeHandle colId="projet" nextColId={nextVisible("projet")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
         {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays||new Set(allPays)} onChange={setSelPays}/>}<ResizeHandle colId="pays" nextColId={nextVisible("pays")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
@@ -629,7 +778,7 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
           {show("arrivee")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
           {show("tests")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             {r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}
-            {r.clientPresence?.present&&<span title={"Client/NOBO présent"+(r.clientPresence.date?" le "+r.clientPresence.date:"")} style={{marginLeft:7,fontSize:13,background:T.violet100,color:T.violet600,borderRadius:5,padding:"2px 6px",fontWeight:700}}>👤{r.clientPresence.date?" "+fmt(new Date(r.clientPresence.date)):""}</span>}
+            {r.clientPresence?.present&&<span title={"Client/NOBO présent"+(r.clientPresence.date?" le "+r.clientPresence.date:"")} style={{marginLeft:7,fontSize:13,background:"#fde4e1",color:T.red500,borderRadius:5,padding:"2px 6px",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><PersonIcon size={12} color={T.red500}/>{r.clientPresence.date?" "+fmt(new Date(r.clientPresence.date)):""}</span>}
           </td>}
           {show("finprod")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
           {show("depart")&&<td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
@@ -641,7 +790,7 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
       })}</tbody>
     </table>
     </div>
-    {sel&&<ProjectModal pj={sel} data={data} df={df} onClose={()=>setSel(null)}/>}
+    {sel&&<ProjectModal pj={sel} data={data} df={df} onClose={()=>setSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
   </div>);
 }
 
@@ -679,29 +828,41 @@ function getWeekStatus(r,weekStart,weekEnd){
   return null;
 }
 const SEGMENT_STYLE={
-  "Arrivée":{c:T.teal500,bold:false},
-  "Production":{c:"#5eccc9",bold:false},
-  "Tests":{c:T.amber500,bold:true},
-  "Fin prod":{c:T.emerald500,bold:true},
-  "Départ":{c:T.red500,bold:true},
+  "Arrivée":{c:"#574b3f",bold:false},
+  "Production":{c:"#215275",bold:false},
+  "Tests":{c:"#f2ba5e",bold:true},
+  "Fin prod":{c:"#4f7d5d",bold:true},
+  "Départ":{c:"#f78934",bold:true},
 };
 function weekStartOf(d){const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);x.setHours(0,0,0,0);return x;}
 
-function getDayStatus(r,day){
+function getDayStatus(r,day,excludedDates){
   const dayEnd=new Date(day);dayEnd.setDate(dayEnd.getDate()+1);
   const status=getWeekStatus(r,day,dayEnd);
   if(!status)return null;
   const isWeekend=day.getDay()===0||day.getDay()===6;
-  if(!isWeekend)return status;
-  // Le week-end : pas de Production ni de Tests (l'atelier et les automaticiens ne travaillent pas), mais les jalons ponctuels restent affichés
-  const milestones=status.split(" + ").filter(m=>m!=="Production"&&m!=="Tests");
+  const isExcluded=excludedDates&&excludedDates.includes(toLocalISO(day));
+  if(!isWeekend&&!isExcluded)return status;
+  // Le week-end ou un jour exclu manuellement : pas de Production ni de Tests (le week-end seulement pour Tests), mais les jalons ponctuels restent affichés
+  const milestones=status.split(" + ").filter(m=>{
+    if(m==="Production")return false; // toujours exclu si week-end OU exclusion manuelle
+    if(m==="Tests"&&isWeekend)return false;
+    return true;
+  });
   return milestones.length?milestones.join(" + "):null;
 }
-function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor}){
+function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor,closurePeriods,productionExclusions}){
+  const isClosurePeriod=(colStart,colEnd)=>{
+    if(!closurePeriods||!closurePeriods.length)return false;
+    return closurePeriods.some(p=>{
+      const ps=new Date(p.start),pe=new Date(p.end);pe.setHours(23,59,59,999);
+      return colStart<pe&&colEnd>=ps;
+    });
+  };
   const rowH=54;
   const [zoomLevel,setZoomLevel]=useState(1); // 0=zoomé (peu de colonnes, larges), 1=normal, 2=dézoomé (plus de colonnes, étroites)
-  const WEEK_COUNTS=[5,8,14];
-  const DAY_COUNTS=[9,14,21];
+  const WEEK_COUNTS=[5,8,14,24];
+  const DAY_COUNTS=[9,14,21,35];
   const nWeeks=WEEK_COUNTS[zoomLevel];
   const nDays=DAY_COUNTS[zoomLevel];
   const zoomIn=()=>setZoomLevel(z=>Math.max(0,z-1));
@@ -777,9 +938,10 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
   // Molette horizontale (ou verticale convertie) pour naviguer
   const wheelAccum=React.useRef(0);
   const onWheelNav=e=>{
+    // Ne capture que le défilement horizontal (trackpad/molette latérale) ; le scroll vertical classique reste libre pour faire défiler la page
+    if(Math.abs(e.deltaX)<=Math.abs(e.deltaY))return;
     e.preventDefault();
-    const delta=e.deltaX!==0?e.deltaX:e.deltaY;
-    wheelAccum.current+=delta;
+    wheelAccum.current+=e.deltaX;
     const step=mode==="week"?92:64;
     if(Math.abs(wheelAccum.current)>=step){
       const unitsShift=mode==="week"?Math.sign(wheelAccum.current)*7:Math.sign(wheelAccum.current);
@@ -811,8 +973,11 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
 
     <div onMouseDown={onMouseDownDrag} onMouseMove={onMouseMoveDrag} onMouseUp={onMouseUpDrag} onMouseLeave={onMouseUpDrag} onWheel={onWheelNav}
       style={{overflowX:"auto",cursor:"grab",userSelect:"none"}}>
-      <div style={{display:"grid",gridTemplateColumns:"210px repeat("+cols.length+",minmax("+(mode==="week"?92:64)+"px,1fr))"}}>
-        <div style={{padding:"6px 14px",fontSize:13,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}/>
+      <div style={{display:"grid",gridTemplateColumns:"210px "+(mode==="week"
+        ?"repeat("+cols.length+",minmax(92px,1fr))"
+        :cols.map(d=>(d.getDay()===0||d.getDay()===6)?"minmax(34px,0.55fr)":"minmax(64px,1fr)").join(" ")
+      )}}>
+        <div style={{padding:"6px 14px",fontSize:13,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:0,zIndex:12}}/>
         {(()=>{
           // Regroupe les colonnes consécutives par mois pour afficher une bande "Mois Année" au-dessus
           const groups=[];
@@ -823,26 +988,32 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
             else groups.push({m,y,span:1});
           });
           return groups.map((g,gi)=>(
-            <div key={gi} style={{gridColumn:"span "+g.span,padding:"6px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line}}>{MONTHS_FULL[g.m]} {g.y}</div>
+            <div key={gi} style={{gridColumn:"span "+g.span,padding:"6px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,position:"sticky",top:0,zIndex:10}}>{MONTHS_FULL[g.m]} {g.y}</div>
           ));
         })()}
-        <div style={{padding:"9px 14px",fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,zIndex:2}}>Machine</div>
-        {mode==="week"?weeks.map((w,wi)=>(
-          <div key={wi} style={{padding:"9px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:wi===todayWeekIdx?"#fff":T.ink500,background:wi===todayWeekIdx?T.teal500:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:wi===todayWeekIdx?"inset 0 -3px 0 "+T.navy900:"none"}}>S{weekNum(w)}</div>
-        )):days.map((d,di)=>{
+        <div style={{padding:"9px 14px",fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:33,zIndex:12}}>Machine</div>
+        {mode==="week"?weeks.map((w,wi)=>{
+          const we=new Date(w);we.setDate(we.getDate()+7);
+          const closed=isClosurePeriod(w,we);
+          return(<div key={wi} style={{padding:"9px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:wi===todayWeekIdx?"#fff":closed?T.ink300:T.ink500,background:wi===todayWeekIdx?T.teal500:closed?"#e2e2e2":T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:wi===todayWeekIdx?"inset 0 -3px 0 "+T.navy900:"none",position:"sticky",top:33,zIndex:10}}>S{weekNum(w)}{closed&&" 🏖️"}</div>);
+        }):days.map((d,di)=>{
           const isWE=d.getDay()===0||d.getDay()===6;
-          return(<div key={di} style={{padding:"6px 2px",textAlign:"center",background:di===todayDayIdx?T.teal500:isWE?T.surfaceAlt:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:di===todayDayIdx?"inset 0 -3px 0 "+T.navy900:"none"}}>
-            <div style={{fontSize:12,fontWeight:600,color:di===todayDayIdx?"rgba(255,255,255,.85)":T.ink300}}>{DAY_NAMES[d.getDay()]}</div>
-            <div style={{fontSize:15,fontWeight:700,color:di===todayDayIdx?"#fff":T.ink700}}>{d.getDate()}</div>
+          const dEnd=new Date(d);dEnd.setDate(dEnd.getDate()+1);
+          const closed=isClosurePeriod(d,dEnd);
+          return(<div key={di} style={{padding:"6px 2px",textAlign:"center",background:di===todayDayIdx?T.teal500:closed?"#e2e2e2":isWE?T.surfaceAlt:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:di===todayDayIdx?"inset 0 -3px 0 "+T.navy900:"none",position:"sticky",top:33,zIndex:10}}>
+            <div style={{fontSize:12,fontWeight:600,color:di===todayDayIdx?"rgba(255,255,255,.85)":T.ink300}}>S{weekNum(d)}</div>
+            <div style={{fontSize:13,fontWeight:600,color:di===todayDayIdx?"rgba(255,255,255,.85)":closed?T.ink300:T.ink300}}>{DAY_NAMES[d.getDay()]}</div>
+            <div style={{fontSize:17,fontWeight:700,color:di===todayDayIdx?"#fff":closed?T.ink300:T.ink700}}>{d.getDate()}</div>
           </div>);
         })}
 
-        {pjs.map(pj=>{
+        {pjs.map((pj,pjIdx)=>{
           const r=data.find(x=>x.pj===pj);
           const color=pjColors[pj]||T.ink500;
           const meta=getPjMeta(pj);
+          const rowBg=pjIdx%2===0?T.card:T.surface;
           return(<React.Fragment key={pj}>
-            <div onClick={()=>onSelectPj&&onSelectPj(pj)} style={{padding:"6px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:2,height:rowH,borderBottom:"1px solid "+T.surface,borderRight:"1px solid "+T.line,background:T.card,position:"sticky",left:0,cursor:"pointer",overflow:"hidden"}}>
+            <div onClick={()=>onSelectPj&&onSelectPj(pj)} style={{padding:"6px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:2,height:rowH,borderBottom:"1px solid "+T.surface,borderRight:"1px solid "+T.line,background:rowBg,position:"sticky",left:0,cursor:"pointer",overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
                 <span style={{fontSize:16,fontWeight:700,color:T.teal600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj}</span>
@@ -856,52 +1027,35 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
               const we=new Date(w);we.setDate(we.getDate()+7);
               const status=getWeekStatus(r,w,we);
               const isTodayCol=wi===todayWeekIdx;
-              if(!status)return<div key={wi} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:isTodayCol?"rgba(13,155,181,.08)":"transparent"}}/>;
+              const closed=isClosurePeriod(w,we);
+              const cellBg=closed?"#e2e2e2":isTodayCol?"rgba(13,155,181,.08)":rowBg;
+              if(!status)return<div key={wi} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:cellBg}}/>;
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
               const presenceDate=r.clientPresence?.present&&r.clientPresence.date?new Date(r.clientPresence.date):null;
               const showPresence=presenceDate&&presenceDate>=w&&presenceDate<we;
-              return(<div key={wi} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",position:"relative",background:isTodayCol?"rgba(13,155,181,.08)":"transparent"}}>
-                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?9.5:11,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 4px"}}>{status}</div>
-                {showPresence&&<span style={{position:"absolute",top:-2,right:-2,fontSize:15,background:T.violet100,border:"1.5px solid "+T.violet600,borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center"}}>👤</span>}
+              return(<div key={wi} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",position:"relative",background:cellBg}}>
+                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?11:13,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 4px",opacity:closed?0.45:1}}>{status}</div>
+                {showPresence&&<span style={{position:"absolute",top:-8,right:-8,fontSize:20,background:T.red500,border:"2px solid #fff",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:T.shadowMd,zIndex:5}}><PersonIcon size={18} color="#fff"/></span>}
               </div>);
             }):days.map((d,di)=>{
               const isWE=d.getDay()===0||d.getDay()===6;
-              const status=getDayStatus(r,d);
+              const status=getDayStatus(r,d,productionExclusions?.[pj]);
               const isTodayCol=di===todayDayIdx;
-              if(!status)return<div key={di} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:isTodayCol?"rgba(13,155,181,.12)":isWE?T.surfaceAlt:"transparent"}}/>;
+              const dEnd=new Date(d);dEnd.setDate(dEnd.getDate()+1);
+              const closed=isClosurePeriod(d,dEnd);
+              const cellBg=closed?"#e2e2e2":isTodayCol?"rgba(13,155,181,.12)":isWE?(pjIdx%2===0?"#eef1f4":"#e4e8eb"):rowBg;
+              if(!status)return<div key={di} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:cellBg}}/>;
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
               const showPresence=r.clientPresence?.present&&r.clientPresence.date&&new Date(r.clientPresence.date).toDateString()===d.toDateString();
-              return(<div key={di} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",background:isTodayCol?"rgba(13,155,181,.12)":isWE?T.surfaceAlt:"transparent",position:"relative"}}>
-                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?7.5:9,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 2px"}}>{status}</div>
-                {showPresence&&<span style={{position:"absolute",top:-2,right:-2,fontSize:13,background:T.violet100,border:"1.5px solid "+T.violet600,borderRadius:"50%",width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center"}}>👤</span>}
+              return(<div key={di} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",background:cellBg,position:"relative"}}>
+                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?9:10.5,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 2px",opacity:closed?0.45:1}}>{status}</div>
+                {showPresence&&<span style={{position:"absolute",top:-7,right:-7,fontSize:17,background:T.red500,border:"2px solid #fff",borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:T.shadowMd,zIndex:5}}><PersonIcon size={14} color="#fff"/></span>}
               </div>);
             })}
           </React.Fragment>);
         })}
-      </div>
-    </div>
-
-    {/* mini-frise annuelle de navigation, même esprit que le Gantt */}
-    <div style={{padding:"10px 18px",borderTop:"1px solid "+T.line,background:T.surface}}>
-      <div onClick={e=>{
-        const rect=e.currentTarget.getBoundingClientRect();
-        const ratio=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
-        const yearStartCal=new Date(today.getFullYear(),0,1);
-        const targetDay=Math.round(ratio*365);
-        const target=new Date(yearStartCal);target.setDate(target.getDate()+targetDay);
-        if(mode==="week")setAnchor(weekStartOf(target));
-        else{target.setHours(0,0,0,0);setDayAnchor(target);}
-      }}
-        style={{position:"relative",height:22,borderRadius:6,background:T.surfaceAlt,cursor:"pointer",overflow:"hidden"}}>
-        {MONTHS.map((mn,mi)=>{const ms=new Date(today.getFullYear(),mi,1);const yearStartCal=new Date(today.getFullYear(),0,1);const left=((ms-yearStartCal)/86400000/365)*100;return(
-          <div key={mi} style={{position:"absolute",left:left+"%",top:0,bottom:0,width:1,background:T.line}}/>
-        );})}
-        <div style={{position:"absolute",left:((today-new Date(today.getFullYear(),0,1))/86400000/365)*100+"%",top:0,bottom:0,width:2,background:T.red500}}/>
-        {MONTHS.map((mn,mi)=>{const ms=new Date(today.getFullYear(),mi,1);const yearStartCal=new Date(today.getFullYear(),0,1);const left=(((ms-yearStartCal)/86400000+15)/365)*100;return(
-          <span key={mi} style={{position:"absolute",left:left+"%",top:2,fontSize:13,color:T.ink500,fontWeight:600,transform:"translateX(-50%)"}}>{mn}</span>
-        );})}
       </div>
     </div>
 
@@ -945,7 +1099,7 @@ function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMonth=true
     </select>}
   </div>);
 }
-function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor}){
+function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,toggleProductionExclusion}){
   const [fEtat,setFEtat]=useState(new Set(ALL_ETATS));
   const [kpiStep,setKpiStep]=useState("depart");
   const [chargeYear,setChargeYear]=useState(null);
@@ -1244,7 +1398,7 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
       {initialData.length===0&&<div style={{fontSize:15,color:T.amber600,marginTop:9,fontWeight:600}}>⚠️ Aucun planning initial importé — les dérives ne peuvent pas être calculées.</div>}
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      {[["derives","📈 KPIs & Dérives"],["avancement","🔧 Avancement"],["statut","🏷️ Statut & État"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"9px 18px",borderRadius:10,border:"none",background:tab===id?T.teal500:T.card,color:tab===id?"#fff":T.ink700,fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:tab===id?T.shadowSm:"none"}}>{l}</button>)}
+      {[["derives","📈 KPIs & Dérives"],["avancement","🔧 Avancement"],["statut","🏷️ Statut & État"],["vacances","🏖️ Vacances"],["production","🏭 Production"]].map(([id,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"9px 18px",borderRadius:10,border:"none",background:tab===id?T.teal500:T.card,color:tab===id?"#fff":T.ink700,fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:tab===id?T.shadowSm:"none"}}>{l}</button>)}
     </div>
     {tab==="derives"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
@@ -1723,15 +1877,156 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12,marginTop:10,paddingLeft:122,flexWrap:"wrap"}}>
             <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-              <div onClick={()=>setClientPresenceFor(r.pj,{...presence,present:!presence.present})} style={{width:46,height:26,borderRadius:13,background:presence.present?T.violet500:T.surfaceAlt,position:"relative",transition:"background .15s"}}>
+              <div onClick={()=>setClientPresenceFor(r.pj,{...presence,present:!presence.present})} style={{width:46,height:26,borderRadius:13,background:presence.present?T.teal500:T.surfaceAlt,position:"relative",transition:"background .15s"}}>
                 <div style={{width:21,height:21,borderRadius:"50%",background:"#fff",position:"absolute",top:2.5,left:presence.present?23:2.5,transition:"left .15s",boxShadow:T.shadowSm}}/>
               </div>
-              <span style={{fontSize:15,color:T.ink700,fontWeight:700}}>👤 Présence client / NOBO aux tests</span>
+              <span style={{fontSize:15,color:T.ink700,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6}}><PersonIcon size={15} color={T.ink700}/> Présence client / NOBO aux tests</span>
             </label>
-            {presence.present&&<input type="date" value={presence.date||""} onChange={e=>setClientPresenceFor(r.pj,{...presence,date:e.target.value})} style={{padding:"7px 11px",borderRadius:8,border:"1.5px solid "+T.violet500,fontSize:14,fontFamily:T.font,color:T.ink700,fontWeight:600}}/>}
+            {presence.present&&(()=>{
+              const minD=r.tests?toLocalISO(new Date(r.tests)):null;
+              const maxD=r.testsFin?toLocalISO(new Date(r.testsFin)):minD;
+              const noTestsDates=!minD;
+              return(<>
+                <input type="date" value={presence.date||""} min={minD||undefined} max={maxD||undefined} disabled={noTestsDates}
+                  onChange={e=>{
+                    const v=e.target.value;
+                    if(!v){setClientPresenceFor(r.pj,{...presence,date:""});return;}
+                    if(minD&&v<minD){setClientPresenceFor(r.pj,{...presence,date:minD});return;}
+                    if(maxD&&v>maxD){setClientPresenceFor(r.pj,{...presence,date:maxD});return;}
+                    setClientPresenceFor(r.pj,{...presence,date:v});
+                  }}
+                  style={{padding:"7px 11px",borderRadius:8,border:"1.5px solid "+T.teal500,fontSize:14,fontFamily:T.font,color:T.ink700,fontWeight:600,opacity:noTestsDates?0.5:1}}/>
+                {noTestsDates&&<span style={{fontSize:13,color:T.red500,fontWeight:600}}>Période de Tests non définie pour ce PJ — date impossible à saisir</span>}
+                {!noTestsDates&&<span style={{fontSize:12,color:T.ink300}}>Doit être comprise entre {fmt(new Date(r.tests))} et {fmt(new Date(maxD))}</span>}
+              </>);
+            })()}
           </div>
         </div>);
       })}
+    </div>}
+
+    {tab==="vacances"&&<ClosurePeriodsManager closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriods}/>}
+    {tab==="production"&&<ProductionCalendarManager data={data} productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}/>}
+  </div>);
+}
+
+function ClosurePeriodsManager({closurePeriods,setClosurePeriods}){
+  const [newStart,setNewStart]=useState("");
+  const [newEnd,setNewEnd]=useState("");
+  const [newLabel,setNewLabel]=useState("");
+  const addPeriod=()=>{
+    if(!newStart||!newEnd)return;
+    if(newEnd<newStart){alert("La date de fin doit être après la date de début.");return;}
+    const next=[...closurePeriods,{start:newStart,end:newEnd,label:newLabel.trim()||"Fermeture"}];
+    setClosurePeriods(next);
+    setNewStart("");setNewEnd("");setNewLabel("");
+  };
+  const removePeriod=i=>{
+    const next=closurePeriods.filter((_,idx)=>idx!==i);
+    setClosurePeriods(next);
+  };
+  return(<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd,marginTop:16}}>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:18,color:T.navy800,marginBottom:4}}>🏖️ Périodes de fermeture (vacances)</div>
+    <div style={{fontSize:14,color:T.ink500,marginBottom:14}}>
+      Les semaines/jours concernés seront grisés dans le Calendrier pour tous les utilisateurs.
+    </div>
+    {closurePeriods.length>0&&<div style={{marginBottom:14}}>
+      {closurePeriods.map((p,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid "+T.surface}}>
+          <span style={{fontSize:14,fontWeight:700,color:T.navy800,minWidth:120}}>{p.label}</span>
+          <span style={{fontSize:14,color:T.ink500}}>{fmt(new Date(p.start))} → {fmt(new Date(p.end))}</span>
+          <button onClick={()=>removePeriod(i)} style={{marginLeft:"auto",padding:"5px 11px",borderRadius:7,border:"1px solid "+T.line,background:T.card,color:T.red500,fontSize:13,fontWeight:600,cursor:"pointer"}}>✕ Retirer</button>
+        </div>
+      ))}
+    </div>}
+    <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap",paddingTop:10,borderTop:closurePeriods.length>0?"1px solid "+T.line:"none"}}>
+      <div>
+        <label style={{fontSize:12,color:T.ink500,fontWeight:600,display:"block",marginBottom:4}}>Libellé</label>
+        <input type="text" value={newLabel} onChange={e=>setNewLabel(e.target.value)} placeholder="Ex: Vacances été" style={{padding:"7px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,width:140}}/>
+      </div>
+      <div>
+        <label style={{fontSize:12,color:T.ink500,fontWeight:600,display:"block",marginBottom:4}}>Du</label>
+        <input type="date" value={newStart} onChange={e=>setNewStart(e.target.value)} style={{padding:"7px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font}}/>
+      </div>
+      <div>
+        <label style={{fontSize:12,color:T.ink500,fontWeight:600,display:"block",marginBottom:4}}>Au</label>
+        <input type="date" value={newEnd} onChange={e=>setNewEnd(e.target.value)} style={{padding:"7px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font}}/>
+      </div>
+      <button onClick={addPeriod} disabled={!newStart||!newEnd} style={{padding:"8px 16px",borderRadius:8,border:"none",background:newStart&&newEnd?T.teal500:T.surfaceAlt,color:newStart&&newEnd?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:newStart&&newEnd?"pointer":"default"}}>+ Ajouter</button>
+    </div>
+  </div>);
+}
+
+function ProductionCalendarManager({data,productionExclusions,toggleProductionExclusion}){
+  const [selectedPj,setSelectedPj]=useState("");
+  const r=data.find(x=>x.pj===selectedPj);
+  const prodRange=useMemo(()=>{
+    if(!r||!r.arrivee||!r.finProd)return null;
+    return{start:new Date(r.arrivee),end:new Date(r.finProd)};
+  },[r]);
+  const [viewMonth,setViewMonth]=useState(null);
+  useEffect(()=>{
+    if(prodRange)setViewMonth(new Date(prodRange.start.getFullYear(),prodRange.start.getMonth(),1));
+  },[prodRange]);
+
+  const excluded=productionExclusions[selectedPj]||[];
+  const isProdDay=d=>{
+    if(!prodRange)return false;
+    if(d.getDay()===0||d.getDay()===6)return false;
+    return d>=prodRange.start&&d<=prodRange.end;
+  };
+
+  const monthGrid=useMemo(()=>{
+    if(!viewMonth)return[];
+    const y=viewMonth.getFullYear(),m=viewMonth.getMonth();
+    const firstDay=new Date(y,m,1);
+    const adj=(firstDay.getDay()+6)%7;
+    const dim=new Date(y,m+1,0).getDate();
+    const cells=[...Array(adj).fill(null),...Array.from({length:dim},(_,i)=>new Date(y,m,i+1))];
+    return cells;
+  },[viewMonth]);
+
+  const canGoPrev=prodRange&&viewMonth&&new Date(viewMonth.getFullYear(),viewMonth.getMonth()-1,1)>=new Date(prodRange.start.getFullYear(),prodRange.start.getMonth(),1);
+  const canGoNext=prodRange&&viewMonth&&new Date(viewMonth.getFullYear(),viewMonth.getMonth()+1,1)<=new Date(prodRange.end.getFullYear(),prodRange.end.getMonth(),1);
+
+  return(<div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd,marginTop:16}}>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:18,color:T.navy800,marginBottom:4}}>🏭 Désactiver des jours de Production</div>
+    <div style={{fontSize:14,color:T.ink500,marginBottom:14}}>
+      Cliquez sur un jour pour l'exclure de l'affichage « Production » dans le Calendrier (mode Jour) — utile pour un jour férié ponctuel ou une journée sans activité réelle.
+    </div>
+    <select value={selectedPj} onChange={e=>setSelectedPj(e.target.value)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,background:T.surface,marginBottom:14}}>
+      <option value="">— Choisir un PJ —</option>
+      {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
+    </select>
+    {selectedPj&&!prodRange&&<div style={{fontSize:14,color:T.red500}}>Période de Production non définie (Arrivée/Fin de prod manquante) pour ce PJ.</div>}
+    {prodRange&&viewMonth&&<div style={{maxWidth:340}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <button onClick={()=>setViewMonth(new Date(viewMonth.getFullYear(),viewMonth.getMonth()-1,1))} disabled={!canGoPrev} style={{padding:"5px 11px",borderRadius:8,border:"1px solid "+T.line,background:T.card,color:canGoPrev?T.ink700:T.ink300,fontSize:15,cursor:canGoPrev?"pointer":"default"}}>◀</button>
+        <span style={{fontWeight:700,color:T.navy800,fontSize:15}}>{MONTHS_FULL[viewMonth.getMonth()]} {viewMonth.getFullYear()}</span>
+        <button onClick={()=>setViewMonth(new Date(viewMonth.getFullYear(),viewMonth.getMonth()+1,1))} disabled={!canGoNext} style={{padding:"5px 11px",borderRadius:8,border:"1px solid "+T.line,background:T.card,color:canGoNext?T.ink700:T.ink300,fontSize:15,cursor:canGoNext?"pointer":"default"}}>▶</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+        {["L","M","M","J","V","S","D"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:11,fontWeight:700,color:T.ink300}}>{d}</div>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+        {monthGrid.map((d,i)=>{
+          if(!d)return<div key={"e"+i}/>;
+          const iso=toLocalISO(d);
+          const isProd=isProdDay(d);
+          const isExcluded=excluded.includes(iso);
+          return(<button key={iso} disabled={!isProd} onClick={()=>toggleProductionExclusion(selectedPj,iso)}
+            style={{aspectRatio:"1",borderRadius:8,border:"none",fontSize:13,fontWeight:700,cursor:isProd?"pointer":"default",
+              background:isExcluded?T.red500:isProd?"#7a92a3":T.surfaceAlt,
+              color:isExcluded||isProd?"#fff":T.ink300,
+              opacity:isProd?1:0.5}}>
+            {d.getDate()}
+          </button>);
+        })}
+      </div>
+      <div style={{display:"flex",gap:14,marginTop:12,fontSize:12,color:T.ink500}}>
+        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:11,height:11,borderRadius:4,background:"#7a92a3",display:"inline-block"}}/>Production active</span>
+        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:11,height:11,borderRadius:4,background:T.red500,display:"inline-block"}}/>Désactivé</span>
+      </div>
     </div>}
   </div>);
 }
@@ -1739,6 +2034,7 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
 function ImportButton({onImport, busy, label, icon, accent, helpText, warnText, confirmMessage, hasExisting, inputId}){
   const [open,setOpen]=useState(false);
   const [err,setErr]=useState("");
+  const [indice,setIndice]=useState("");
   useSheetJS();
   const fileInputId=inputId||"msp-file";
   const btnLabel=label||"Importer un planning MS Project";
@@ -1750,7 +2046,7 @@ function ImportButton({onImport, busy, label, icon, accent, helpText, warnText, 
       const ok=window.confirm(confirmMessage);
       if(!ok)return false;
     }
-    onImport(parsed);
+    onImport(parsed,indice.trim());
     return true;
   };
 
@@ -1788,6 +2084,11 @@ function ImportButton({onImport, busy, label, icon, accent, helpText, warnText, 
       <div style={{fontSize:15,color:T.ink500,marginBottom:14,lineHeight:1.6}}>
         {helpText||(<>Export Excel (.xlsx) avec colonnes <b>Nom, Début, Niveau hiérarchique</b>.<br/>Niveau 1 = PJ · Niveau 2 = Arrivée / Tests / Fin de production / Départ.</>)}
       </div>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>Indice du document (ex: H)</label>
+        <input type="text" value={indice} onChange={e=>setIndice(e.target.value)} maxLength={4} placeholder="H"
+          style={{padding:"7px 11px",borderRadius:8,border:"1.5px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,fontWeight:600,width:80}}/>
+      </div>
       <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)handleFile(f);}}
         style={{border:"2px dashed "+T.ink100,borderRadius:11,padding:"24px 16px",background:T.surface,textAlign:"center",cursor:"pointer",marginBottom:12}}
         onClick={()=>document.getElementById(fileInputId).click()}>
@@ -1804,12 +2105,14 @@ function ImportButton({onImport, busy, label, icon, accent, helpText, warnText, 
 const DOC_REF=()=>doc(db,"planning","current");
 const INITIAL_DOC_REF=()=>doc(db,"planning","initial");
 const OVERRIDES_DOC_REF=()=>doc(db,"planning","overrides");
+const COMMENTS_DOC_REF=()=>doc(db,"planning","comments");
 
 export default function App(){
   const [data,setData]=useState([]);
   const [loading,setLoading]=useState(true);
   const [importing,setImporting]=useState(false);
   const [lastImport,setLastImport]=useState(null);
+  const [docIndice,setDocIndice]=useState("");
   const [initialData,setInitialData]=useState([]);
   const [initialImporting,setInitialImporting]=useState(false);
   const [lastInitialImport,setLastInitialImport]=useState(null);
@@ -1834,6 +2137,9 @@ export default function App(){
   const [calSel,setCalSel]=useState(null);
   const [etatChoice,setEtatChoice]=useState({});
   const [clientPresence,setClientPresence]=useState({});
+  const [closurePeriods,setClosurePeriods]=useState([]);
+  const [productionExclusions,setProductionExclusions]=useState({});
+  const [comments,setComments]=useState({});
 
   // Lecture temps réel depuis Firestore
   useEffect(()=>{
@@ -1842,6 +2148,7 @@ export default function App(){
         const d = snap.data();
         setData(d.rows || []);
         setLastImport(d.lastImport || null);
+        setDocIndice(d.indice || "");
       }
       setLoading(false);
     }, (err)=>{
@@ -1873,12 +2180,75 @@ export default function App(){
         setEtatChoice(d.etatChoice || {});
         setProgress(d.progress || {});
         setClientPresence(d.clientPresence || {});
+        setClosurePeriods(d.closurePeriods || []);
+        setProductionExclusions(d.productionExclusions || {});
       }
     }, (err)=>{
       console.error("Erreur Firestore (overrides):", err);
     });
     return ()=>unsub();
   },[]);
+
+  const setClosurePeriodsAndSave=useCallback(async next=>{
+    try{
+      await setDoc(OVERRIDES_DOC_REF(), { closurePeriods:next }, { merge:true });
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement : " + e.message);
+    }
+  },[]);
+
+  const toggleProductionExclusion=useCallback(async (pj,dateIso)=>{
+    const current=productionExclusions[pj]||[];
+    const next=current.includes(dateIso)?current.filter(d=>d!==dateIso):[...current,dateIso];
+    const nextAll={...productionExclusions,[pj]:next};
+    try{
+      await setDoc(OVERRIDES_DOC_REF(), { productionExclusions:nextAll }, { merge:true });
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement : " + e.message);
+    }
+  },[productionExclusions]);
+
+  // Lecture temps réel des commentaires par PJ
+  useEffect(()=>{
+    const unsub = onSnapshot(COMMENTS_DOC_REF(), (snap)=>{
+      if(snap.exists())setComments(snap.data().byPj || {});
+    }, (err)=>{
+      console.error("Erreur Firestore (comments):", err);
+    });
+    return ()=>unsub();
+  },[]);
+
+  const addComment=useCallback(async (pj,author,text)=>{
+    if(!author.trim()||!text.trim())return false;
+    const current=comments[pj]||[];
+    const next=[...current,{author:author.trim(),text:text.trim(),date:new Date().toISOString()}];
+    const nextAll={...comments,[pj]:next};
+    try{
+      await setDoc(COMMENTS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement du commentaire : " + e.message);
+      return false;
+    }
+  },[comments]);
+
+  const deleteComment=useCallback(async (pj,index,pin)=>{
+    if(pin!==PIN){alert("Code incorrect.");return false;}
+    const current=comments[pj]||[];
+    const next=current.filter((_,i)=>i!==index);
+    const nextAll={...comments,[pj]:next};
+    try{
+      await setDoc(COMMENTS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de la suppression : " + e.message);
+      return false;
+    }
+  },[comments]);
 
   const setClientPresenceFor=useCallback(async (pj,value)=>{
     const next={...clientPresence,[pj]:value};
@@ -1915,12 +2285,12 @@ export default function App(){
     setSavingProgress(false);
   },[progress]);
 
-  const handleImport=useCallback(async rows=>{
+  const handleImport=useCallback(async (rows,indice)=>{
     setImporting(true);
     try{
       const lastImportStr=new Date().toLocaleString("fr-FR");
-      await setDoc(DOC_REF(), { rows, lastImport: lastImportStr });
-      setSelPJs(new Set(rows.map(r=>r.pj)));
+      await setDoc(DOC_REF(), { rows, lastImport: lastImportStr, indice: indice||"" });
+      setSelPJs(rows.length?new Set(rows.map(r=>r.pj)):null);
       // Pas besoin de setData ici : onSnapshot va le faire automatiquement pour tout le monde
     }catch(e){
       console.error(e);
@@ -1965,7 +2335,7 @@ export default function App(){
     return true;
   }),[dataWithOverrides,selEtats,selGammes,selPJs,allPJs,selProjets,allProjets,selPays,allPays,selChefs,allChefs,selMoisArrivee,selMoisTests,selMoisFinProd,selMoisDepart]);
 
-  const VIEWS=[{id:"table",l:"📋 Liste"},{id:"gantt",l:"📊 Gantt"},{id:"calendar",l:"📅 Calendrier"}];
+  const VIEWS=[{id:"table",l:"📋 Liste"},{id:"gantt",l:"📊 Gantt"},{id:"calendar",l:"📅 Calendrier"},{id:"comments",l:"💬 Commentaires"}];
 
   return(<div style={{fontFamily:T.font,fontSize:17,background:T.surface,minHeight:"100vh",padding:20,color:T.ink900}}>
     <style>{"*{box-sizing:border-box;}"}</style>
@@ -1975,7 +2345,10 @@ export default function App(){
       <img src={LOGO_B64} alt="ENOGIA" style={{height:64,objectFit:"contain"}}/>
       <div style={{borderLeft:"1px solid "+T.line,paddingLeft:18}}>
         <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:36,letterSpacing:"-.01em",color:T.navy900}}>Planning Ordonnancement</div>
-        <div style={{color:T.ink500,fontSize:16,marginTop:3,fontWeight:500}}>{loading?"Chargement...":data.length+" unités"+(lastImport?" · Import "+lastImport:" · Aucune donnée importée")}</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginTop:3,flexWrap:"wrap"}}>
+          <span style={{color:T.ink500,fontSize:16,fontWeight:500}}>{loading?"Chargement...":data.length+" unités"+(lastImport?" · Import "+lastImport:" · Aucune donnée importée")}</span>
+          {docIndice&&<span style={{background:T.teal500,color:"#fff",borderRadius:7,padding:"3px 11px",fontSize:14,fontWeight:700}}>Indice {docIndice}</span>}
+        </div>
       </div>
       <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
         <ImportButton
@@ -2013,7 +2386,9 @@ export default function App(){
             </div>
             <ManagerPanel data={dataWithOverrides} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}
               etatChoice={etatChoice} setEtatFor={setEtatFor} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}
-              tab={managerTab} setTab={setManagerTab} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}/>
+              tab={managerTab} setTab={setManagerTab} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}
+              closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriodsAndSave}
+              productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(
@@ -2028,15 +2403,18 @@ export default function App(){
               selMoisArrivee={selMoisArrivee} setSelMoisArrivee={setSelMoisArrivee}
               selMoisTests={selMoisTests} setSelMoisTests={setSelMoisTests}
               selMoisFinProd={selMoisFinProd} setSelMoisFinProd={setSelMoisFinProd}
-              selMoisDepart={selMoisDepart} setSelMoisDepart={setSelMoisDepart}/>}
+              selMoisDepart={selMoisDepart} setSelMoisDepart={setSelMoisDepart}
+              comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
             {view==="gantt"&&<GanttView data={filtered} progress={progress} df={df}/>}
             {view==="calendar"&&<CalendarView data={filtered} onSelectPj={setCalSel}
               mode={calMode} setMode={setCalMode} anchor={calAnchor} setAnchor={setCalAnchor}
-              dayAnchor={calDayAnchor} setDayAnchor={setCalDayAnchor}/>}
+              dayAnchor={calDayAnchor} setDayAnchor={setCalDayAnchor} closurePeriods={closurePeriods}
+              productionExclusions={productionExclusions}/>}
+            {view==="comments"&&<CommentsView data={filtered} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
           </>
         )}
       </>
     )}
-    {calSel&&<ProjectModal pj={calSel} data={dataWithOverrides} df={df} onClose={()=>setCalSel(null)}/>}
+    {calSel&&<ProjectModal pj={calSel} data={dataWithOverrides} df={df} onClose={()=>setCalSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
   </div>);
 }
