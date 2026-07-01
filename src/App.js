@@ -71,6 +71,9 @@ const PJ_META={
   "PJ485":{nomProjet:"BIOSORRA",pays:"Kenya",chefProjet:"Clément MARTOUZET"},
   "PJ486":{nomProjet:"ALBRET",pays:"France",chefProjet:"Emmy BOURELLY"},
   "PJ488":{nomProjet:"KAGOSHIMA",pays:"Japon",chefProjet:"Gabriel VINCENT"},
+  "PJ502":{nomProjet:"—",pays:"Oman",chefProjet:"À définir"},
+  "PJ503":{nomProjet:"—",pays:"Japon",chefProjet:"À définir"},
+  "PJ505":{nomProjet:"—",pays:"Japon",chefProjet:"À définir"},
 };
 function getPjMeta(pj){
   if(PJ_META[pj])return PJ_META[pj];
@@ -90,6 +93,18 @@ const COUNTRY_ISO={
   "Singapore":"sg","Norvège":"no","Islande":"is","Kenya":"ke",
   "FR-La Réunion":"re","Japon":"jp",
 };
+function driftColor(drift){
+  if(drift==null||drift<=0)return null; // pas de décalage ou en avance : pas de pastille
+  if(drift<=5)return T.amber500;
+  if(drift<=15)return"#e8821a";
+  return T.red500;
+}
+function DriftDot({drift,size}){
+  const c=driftColor(drift);
+  if(!c)return null;
+  const s=size||9;
+  return <span title={"Décalage vs planning initial : +"+drift+"j"} style={{display:"inline-block",width:s,height:s,borderRadius:"50%",background:c,flexShrink:0,boxShadow:"0 0 0 2px #fff"}}/>;
+}
 function PersonIcon({size,color}){
   const s=size||14;
   return(<svg width={s} height={s} viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}>
@@ -143,7 +158,7 @@ function fmtMode(d,mode){
 function guessGamme(pj){
   const n=pj.toUpperCase();
   if(n.includes("CONT"))return"CONTENEUR";
-  if(n.match(/461|449|180MT/))return"180MT";
+  if(n.match(/461|449|479|180MT/))return"180MT";
   if(n.includes("485")||n.includes("100MT"))return"100MT";
   if(n.includes("420"))return"100LTV2R";
   if(n.match(/456|472|460|100LT/))return"100LTV3";
@@ -551,6 +566,7 @@ function ProjectComments({pj,comments,addComment,deleteComment}){
             </div>
           </div>
           <div style={{fontSize:14,color:T.ink700,whiteSpace:"pre-wrap"}}>{c.text}</div>
+          {c.linkedDate&&<div style={{marginTop:5,fontSize:12,color:T.ink500,fontWeight:600}}>☁️ Lié au {fmt(new Date(c.linkedDate))}</div>}
           {deleteTarget===c._idx&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+T.line,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
             <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} placeholder="Code Manager" style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,width:120}}/>
             <button onClick={confirmDelete} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.red500,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer la suppression</button>
@@ -639,6 +655,7 @@ function CommentsView({data,comments,addComment,deleteComment}){
               </div>
             </div>
             <div style={{fontSize:14,color:T.ink700,whiteSpace:"pre-wrap"}}>{c.text}</div>
+            {c.linkedDate&&<div style={{marginTop:5,fontSize:12,color:T.ink500,fontWeight:600}}>☁️ Lié au {fmt(new Date(c.linkedDate))}</div>}
             {isTarget&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+T.line,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
               <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} placeholder="Code Manager" style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,width:120}}/>
               <button onClick={confirmDelete} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.red500,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer la suppression</button>
@@ -724,14 +741,43 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
   const [sel,setSel]=useState(null);
   const [hiddenCols,setHiddenCols]=useState(new Set());
   const [colWidths,setColWidths]=useState(DEFAULT_COL_WIDTHS_PCT);
+  useSheetJS();
   const show=id=>!hiddenCols.has(id);
   const cw=id=>(colWidths[id]||DEFAULT_COL_WIDTHS_PCT[id])+"%";
+  const exportToExcel=()=>{
+    if(!window.XLSX){alert("Librairie Excel en cours de chargement, réessayez dans 2 secondes.");return;}
+    const headers=["N° PJ","Projet","Pays","Chef de Projet","Gamme","État","Arrivée","Tests","Fin prod","Départ","Avancement (%)"];
+    const rows=data.map(r=>{
+      const meta=getPjMeta(r.pj);
+      const pval=progress[r.pj];
+      return [
+        r.pj,
+        meta.nomProjet,
+        meta.pays,
+        meta.chefProjet,
+        r.gamme||"",
+        ETAT_META[r.etat]?.label||r.etat||"",
+        r.arrivee?new Date(r.arrivee).toLocaleDateString("fr-FR"):"",
+        (r.tests?new Date(r.tests).toLocaleDateString("fr-FR"):"")+(r.testsFin?" → "+new Date(r.testsFin).toLocaleDateString("fr-FR"):""),
+        r.finProd?new Date(r.finProd).toLocaleDateString("fr-FR"):"",
+        r.depart?new Date(r.depart).toLocaleDateString("fr-FR"):"",
+        pval!=null?pval:""
+      ];
+    });
+    const ws=window.XLSX.utils.aoa_to_sheet([headers,...rows]);
+    ws["!cols"]=headers.map(()=>({wch:17}));
+    const wb=window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb,ws,"Planning");
+    const dateStr=new Date().toLocaleDateString("fr-FR").replaceAll("/","-");
+    window.XLSX.writeFile(wb,"Planning_Enogia_"+dateStr+".xlsx");
+  };
   // Liste ordonnée des colonnes actuellement visibles, pour savoir quelle est "la suivante" lors du redimensionnement
   const visibleColOrder=["pj","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement"].filter(id=>id==="pj"||show(id));
   const nextVisible=id=>{const i=visibleColOrder.indexOf(id);return i>=0&&i<visibleColOrder.length-1?visibleColOrder[i+1]:null;};
   const thBase={padding:"10px 14px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:15,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".04em",position:"relative",overflow:"hidden"};
   return(<div style={{background:T.card,borderRadius:14,boxShadow:T.shadowMd,fontFamily:T.font}}>
-    <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.line,display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
+    <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.line,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:10}}>
+      <button onClick={exportToExcel} style={{padding:"8px 16px",borderRadius:9,border:"1px solid "+T.teal400,background:T.teal100,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>📤 Export Excel</button>
       <ColumnPicker hidden={hiddenCols} setHidden={setHiddenCols}/>
     </div>
     <div style={{overflowX:"auto",overflowY:"visible"}}>
@@ -768,8 +814,9 @@ function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes
         const done=r.etat==="SHIPPED";
         const pval=progress[r.pj];
         const meta=getPjMeta(r.pj);
-        return(<tr key={i} onClick={()=>setSel(sel===r.pj?null:r.pj)} style={{borderBottom:"1px solid "+T.surface,cursor:"pointer",background:sel===r.pj?T.teal100:T.card,transition:"background .1s"}}>
-          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.pj}</td>
+        const rowBg=sel===r.pj?T.teal100:(i%2===0?T.card:T.surface);
+        return(<tr key={i} onClick={()=>setSel(sel===r.pj?null:r.pj)} style={{borderBottom:"1px solid "+T.surface,cursor:"pointer",background:rowBg,transition:"background .1s"}}>
+          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:17,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span style={{display:"inline-flex",alignItems:"center",gap:7}}>{r.pj}<DriftDot drift={r.drift}/></span></td>
           {show("projet")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet}</td>}
           {show("pays")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><CountryFlag pays={meta.pays} size={13}/> {meta.pays}</span></td>}
           {show("chef")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{initials(meta.chefProjet)}</td>}
@@ -851,7 +898,7 @@ function getDayStatus(r,day,excludedDates){
   });
   return milestones.length?milestones.join(" + "):null;
 }
-function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor,closurePeriods,productionExclusions}){
+function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor,closurePeriods,productionExclusions,comments,addComment,zoomLevel,setZoomLevel}){
   const isClosurePeriod=(colStart,colEnd)=>{
     if(!closurePeriods||!closurePeriods.length)return false;
     return closurePeriods.some(p=>{
@@ -860,7 +907,11 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
     });
   };
   const rowH=54;
-  const [zoomLevel,setZoomLevel]=useState(1); // 0=zoomé (peu de colonnes, larges), 1=normal, 2=dézoomé (plus de colonnes, étroites)
+  // zoomLevel est désormais géré au niveau de App (props) pour persister quand on quitte/revient sur cet onglet
+  const [commentPopup,setCommentPopup]=useState(null); // {pj, dateIso}
+  const [commentAuthor,setCommentAuthor]=useState("");
+  const [commentText,setCommentText]=useState("");
+  const [commentErr,setCommentErr]=useState("");
   const WEEK_COUNTS=[5,8,14,24];
   const DAY_COUNTS=[9,14,21,35];
   const nWeeks=WEEK_COUNTS[zoomLevel];
@@ -918,10 +969,12 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
     }
   };
 
-  // Glissement à la souris (clic-glisser) pour naviguer
+  // Glissement à la souris (clic-glisser) pour naviguer, avec retour visuel via opacité (sans transform pour ne pas casser le sticky)
+  const [isDragging,setIsDragging]=useState(false);
   const dragRef=React.useRef({active:false,startX:0,colW:mode==="week"?92:64});
   const onMouseDownDrag=e=>{
     dragRef.current={active:true,startX:e.clientX,colW:mode==="week"?92:64};
+    setIsDragging(true);
   };
   const onMouseMoveDrag=e=>{
     if(!dragRef.current.active)return;
@@ -933,7 +986,7 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
       dragRef.current.startX=e.clientX;
     }
   };
-  const onMouseUpDrag=()=>{dragRef.current.active=false;};
+  const onMouseUpDrag=()=>{dragRef.current.active=false;setIsDragging(false);};
 
   // Molette horizontale (ou verticale convertie) pour naviguer
   const wheelAccum=React.useRef(0);
@@ -972,11 +1025,11 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
     </div>
 
     <div onMouseDown={onMouseDownDrag} onMouseMove={onMouseMoveDrag} onMouseUp={onMouseUpDrag} onMouseLeave={onMouseUpDrag} onWheel={onWheelNav}
-      style={{overflowX:"auto",cursor:"grab",userSelect:"none"}}>
+      style={{overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 260px)",cursor:isDragging?"grabbing":"grab",userSelect:"none"}}>
       <div style={{display:"grid",gridTemplateColumns:"210px "+(mode==="week"
         ?"repeat("+cols.length+",minmax(92px,1fr))"
         :cols.map(d=>(d.getDay()===0||d.getDay()===6)?"minmax(34px,0.55fr)":"minmax(64px,1fr)").join(" ")
-      )}}>
+      ),opacity:isDragging?0.85:1,transition:isDragging?"none":"opacity .15s ease-out"}}>
         <div style={{padding:"6px 14px",fontSize:13,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:0,zIndex:12}}/>
         {(()=>{
           // Regroupe les colonnes consécutives par mois pour afficher une bande "Mois Année" au-dessus
@@ -1017,6 +1070,7 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
                 <span style={{fontSize:16,fontWeight:700,color:T.teal600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj}</span>
+                <DriftDot drift={r.drift}/>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:16,overflow:"hidden"}}>
                 <CountryFlag pays={meta.pays} size={11}/>
@@ -1045,13 +1099,24 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
               const dEnd=new Date(d);dEnd.setDate(dEnd.getDate()+1);
               const closed=isClosurePeriod(d,dEnd);
               const cellBg=closed?"#e2e2e2":isTodayCol?"rgba(13,155,181,.12)":isWE?(pjIdx%2===0?"#eef1f4":"#e4e8eb"):rowBg;
-              if(!status)return<div key={di} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:cellBg}}/>;
+              const iso=toLocalISO(d);
+              const dayComments=(comments?.[pj]||[]).filter(c=>c.linkedDate===iso);
+              const hasComment=dayComments.length>0;
+              const openCommentPopup=e=>{
+                e.stopPropagation();
+                setCommentPopup({pj,dateIso:iso});
+                setCommentAuthor("");setCommentText("");setCommentErr("");
+              };
+              if(!status)return(<div key={di} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,background:cellBg,position:"relative"}}>
+                <button onClick={openCommentPopup} title={hasComment?dayComments.length+" commentaire(s) ce jour":"Ajouter un commentaire ce jour"} style={{position:"absolute",bottom:1,right:1,background:"none",border:"none",cursor:"pointer",fontSize:hasComment?13:10,opacity:hasComment?1:0.25,padding:1}}>☁️</button>
+              </div>);
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
               const showPresence=r.clientPresence?.present&&r.clientPresence.date&&new Date(r.clientPresence.date).toDateString()===d.toDateString();
               return(<div key={di} onClick={()=>onSelectPj&&onSelectPj(pj)} style={{height:rowH,borderBottom:"1px solid "+T.surface,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",background:cellBg,position:"relative"}}>
                 <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:status.includes("+")?9:10.5,fontWeight:st.bold?700:600,color:"#fff",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",padding:"0 2px",opacity:closed?0.45:1}}>{status}</div>
                 {showPresence&&<span style={{position:"absolute",top:-7,right:-7,fontSize:17,background:T.red500,border:"2px solid #fff",borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:T.shadowMd,zIndex:5}}><PersonIcon size={14} color="#fff"/></span>}
+                <button onClick={openCommentPopup} title={hasComment?dayComments.length+" commentaire(s) ce jour":"Ajouter un commentaire ce jour"} style={{position:"absolute",bottom:-6,left:-4,background:"none",border:"none",cursor:"pointer",fontSize:hasComment?15:11,opacity:hasComment?1:0.5,padding:1,zIndex:4}}>☁️</button>
               </div>);
             })}
           </React.Fragment>);
@@ -1067,6 +1132,44 @@ function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,s
       </span>)}
       <span style={{fontSize:14,color:T.ink300,marginLeft:"auto"}}>Point coloré = machine · Couleur du segment = étape · Clic = détail</span>
     </div>
+
+    {commentPopup&&<div onClick={()=>setCommentPopup(null)} style={{position:"fixed",inset:0,background:"rgba(12,36,54,.55)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:T.font}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.card,borderRadius:16,padding:22,maxWidth:440,width:"100%",boxShadow:T.shadowLg}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:18,color:T.navy900}}>☁️ Commentaire — {commentPopup.pj}</div>
+            <div style={{color:T.ink500,fontSize:14,marginTop:2}}>{fmt(new Date(commentPopup.dateIso))}</div>
+          </div>
+          <button onClick={()=>setCommentPopup(null)} style={{background:T.surface,border:"none",borderRadius:8,width:30,height:30,fontSize:15,cursor:"pointer",color:T.ink700}}>✕</button>
+        </div>
+
+        {(()=>{
+          const dayComments=(comments?.[commentPopup.pj]||[]).filter(c=>c.linkedDate===commentPopup.dateIso);
+          return dayComments.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14,maxHeight:180,overflowY:"auto"}}>
+            {dayComments.map((c,i)=>(
+              <div key={i} style={{background:T.surface,borderRadius:9,padding:"9px 12px"}}>
+                <div style={{fontWeight:700,color:T.teal600,fontSize:13,marginBottom:3}}>{c.author}</div>
+                <div style={{fontSize:13,color:T.ink700,whiteSpace:"pre-wrap"}}>{c.text}</div>
+              </div>
+            ))}
+          </div>;
+        })()}
+
+        <input type="text" value={commentAuthor} onChange={e=>{setCommentAuthor(e.target.value);setCommentErr("");}} placeholder="Votre nom (obligatoire)" maxLength={40}
+          style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+(commentErr?T.red500:T.line),fontSize:14,fontFamily:T.font,color:T.ink700,width:"100%",marginBottom:6,boxSizing:"border-box"}}/>
+        {commentErr&&<div style={{fontSize:13,color:T.red500,marginBottom:6}}>{commentErr}</div>}
+        <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Votre commentaire..." rows={3} maxLength={1000}
+          style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,resize:"vertical",width:"100%",boxSizing:"border-box",marginBottom:10}}/>
+        <div style={{display:"flex",justifyContent:"flex-end"}}>
+          <button onClick={async ()=>{
+            if(!commentAuthor.trim()){setCommentErr("Le nom est obligatoire pour publier un commentaire.");return;}
+            if(!commentText.trim())return;
+            const ok=await addComment(commentPopup.pj,commentAuthor,commentText,commentPopup.dateIso);
+            if(ok){setCommentText("");setCommentAuthor("");}
+          }} disabled={!commentText.trim()} style={{padding:"8px 18px",borderRadius:8,border:"none",background:commentText.trim()?T.teal500:T.surfaceAlt,color:commentText.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:commentText.trim()?"pointer":"default"}}>Publier</button>
+        </div>
+      </div>
+    </div>}
   </div>);
 }
 
@@ -1315,7 +1418,7 @@ function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,o
   },[fd,chargeYear]);
 
   // ── Charge de travail Atelier / Autom par PJ (heures issues de l'import Excel) ──
-  const CAPA_ATELIER_SEM=210; // 6 personnes × 35h/semaine
+  const CAPA_ATELIER_SEM=175; // capacité 500% (5 postes) × 35h/semaine
   const CAPA_AUTOM_SEM=35;    // 1 poste × 35h/semaine
   const workloadByPJ=useMemo(()=>{
     return fd.filter(r=>r.heuresAtelier||r.heuresAutom).map(r=>({
@@ -2016,7 +2119,7 @@ function ProductionCalendarManager({data,productionExclusions,toggleProductionEx
           const isExcluded=excluded.includes(iso);
           return(<button key={iso} disabled={!isProd} onClick={()=>toggleProductionExclusion(selectedPj,iso)}
             style={{aspectRatio:"1",borderRadius:8,border:"none",fontSize:13,fontWeight:700,cursor:isProd?"pointer":"default",
-              background:isExcluded?T.red500:isProd?"#7a92a3":T.surfaceAlt,
+              background:isExcluded?T.red500:isProd?"#215275":T.surfaceAlt,
               color:isExcluded||isProd?"#fff":T.ink300,
               opacity:isProd?1:0.5}}>
             {d.getDate()}
@@ -2024,7 +2127,7 @@ function ProductionCalendarManager({data,productionExclusions,toggleProductionEx
         })}
       </div>
       <div style={{display:"flex",gap:14,marginTop:12,fontSize:12,color:T.ink500}}>
-        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:11,height:11,borderRadius:4,background:"#7a92a3",display:"inline-block"}}/>Production active</span>
+        <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:11,height:11,borderRadius:4,background:"#215275",display:"inline-block"}}/>Production active</span>
         <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:11,height:11,borderRadius:4,background:T.red500,display:"inline-block"}}/>Désactivé</span>
       </div>
     </div>}
@@ -2117,9 +2220,31 @@ export default function App(){
   const [initialImporting,setInitialImporting]=useState(false);
   const [lastInitialImport,setLastInitialImport]=useState(null);
   const [view,setView]=useState("table");
-  const [calMode,setCalMode]=useState("week");
-  const [calAnchor,setCalAnchor]=useState(()=>weekStartOf(today));
-  const [calDayAnchor,setCalDayAnchor]=useState(()=>{const d=new Date(today);d.setHours(0,0,0,0);return d;});
+  // Format du calendrier (mode semaine/jour, position, zoom) persisté en localStorage :
+  // reste identique quand on quitte/revient sur l'onglet Calendrier, et même après rechargement de la page.
+  const [calMode,setCalMode]=useState(()=>{
+    try{return localStorage.getItem("enogia_calMode")||"week";}catch(e){return"week";}
+  });
+  const [calAnchor,setCalAnchor]=useState(()=>{
+    try{const s=localStorage.getItem("enogia_calAnchor");if(s)return new Date(s);}catch(e){}
+    return weekStartOf(today);
+  });
+  const [calDayAnchor,setCalDayAnchor]=useState(()=>{
+    try{const s=localStorage.getItem("enogia_calDayAnchor");if(s)return new Date(s);}catch(e){}
+    const d=new Date(today);d.setHours(0,0,0,0);return d;
+  });
+  const [calZoom,setCalZoom]=useState(()=>{
+    try{const s=localStorage.getItem("enogia_calZoom");if(s!=null)return parseInt(s,10);}catch(e){}
+    return 1;
+  });
+  useEffect(()=>{
+    try{
+      localStorage.setItem("enogia_calMode",calMode);
+      localStorage.setItem("enogia_calAnchor",calAnchor.toISOString());
+      localStorage.setItem("enogia_calDayAnchor",calDayAnchor.toISOString());
+      localStorage.setItem("enogia_calZoom",String(calZoom));
+    }catch(e){}
+  },[calMode,calAnchor,calDayAnchor,calZoom]);
   const [managerTab,setManagerTab]=useState("derives");
   const [selEtats,setSelEtats]=useState(new Set(ALL_ETATS));
   const [selGammes,setSelGammes]=useState(new Set(ALL_GAMMES));
@@ -2220,10 +2345,10 @@ export default function App(){
     return ()=>unsub();
   },[]);
 
-  const addComment=useCallback(async (pj,author,text)=>{
+  const addComment=useCallback(async (pj,author,text,linkedDate)=>{
     if(!author.trim()||!text.trim())return false;
     const current=comments[pj]||[];
-    const next=[...current,{author:author.trim(),text:text.trim(),date:new Date().toISOString()}];
+    const next=[...current,{author:author.trim(),text:text.trim(),date:new Date().toISOString(),linkedDate:linkedDate||null}];
     const nextAll={...comments,[pj]:next};
     try{
       await setDoc(COMMENTS_DOC_REF(), { byPj:nextAll }, { merge:true });
@@ -2318,7 +2443,15 @@ export default function App(){
   const allChefs=useMemo(()=>[...new Set(data.map(r=>getPjMeta(r.pj).chefProjet))].sort(),[data]);
 
   // L'état affiché vient exclusivement du choix manuel du Manager (etatChoice), sinon "À définir"
-  const dataWithOverrides=useMemo(()=>data.map(r=>({...r,etat:etatChoice[r.pj]||r.etat||"A_DEFINIR",clientPresence:clientPresence[r.pj]||null})),[data,etatChoice,clientPresence]);
+  const initialByPj=useMemo(()=>{const m={};initialData.forEach(r=>{m[r.pj]=r;});return m;},[initialData]);
+  const dataWithOverrides=useMemo(()=>data.map(r=>{
+    const ini=initialByPj[r.pj];
+    let drift=null;
+    if(ini&&ini.depart&&r.depart){
+      drift=Math.round((new Date(r.depart)-new Date(ini.depart))/86400000);
+    }
+    return{...r,etat:etatChoice[r.pj]||r.etat||"A_DEFINIR",clientPresence:clientPresence[r.pj]||null,drift};
+  }),[data,etatChoice,clientPresence,initialByPj]);
 
   const filtered=useMemo(()=>dataWithOverrides.filter(r=>{
     if(!selEtats.has(r.etat))return false;
@@ -2409,7 +2542,8 @@ export default function App(){
             {view==="calendar"&&<CalendarView data={filtered} onSelectPj={setCalSel}
               mode={calMode} setMode={setCalMode} anchor={calAnchor} setAnchor={setCalAnchor}
               dayAnchor={calDayAnchor} setDayAnchor={setCalDayAnchor} closurePeriods={closurePeriods}
-              productionExclusions={productionExclusions}/>}
+              productionExclusions={productionExclusions} comments={comments} addComment={addComment}
+              zoomLevel={calZoom} setZoomLevel={setCalZoom}/>}
             {view==="comments"&&<CommentsView data={filtered} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
           </>
         )}
