@@ -1,0 +1,64 @@
+/* ── ENOGIA — animations & micro-interactions globales ── */
+
+@keyframes enogiaFadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes enogiaModalPop {
+  from { opacity: 0; transform: scale(.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes enogiaBackdropFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes enogiaPulseRing {
+  0%   { box-shadow: 0 0 0 0 rgba(220,38,38,.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(220,38,38,0); }
+  100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
+}
+@keyframes enogiaShimmer {
+  0%   { background-position: -300px 0; }
+  100% { background-position: 300px 0; }
+}
+@keyframes enogiaFloatIn {
+  from { opacity: 0; transform: translateY(6px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes enogiaSpin {
+  to { transform: rotate(360deg); }
+}
+
+.enogia-fade-in { animation: enogiaFadeInUp .4s cubic-bezier(.2,.7,.3,1) both; }
+.enogia-float-in { animation: enogiaFloatIn .28s cubic-bezier(.2,.8,.3,1) both; }
+.enogia-modal-backdrop { animation: enogiaBackdropFade .18s ease both; }
+.enogia-modal-pop { animation: enogiaModalPop .25s cubic-bezier(.2,.85,.3,1.15) both; }
+.enogia-pulse-urgent { animation: enogiaPulseRing 2.2s infinite; }
+
+.enogia-skeleton {
+  background: linear-gradient(90deg, #eef2f4 25%, #f6f8f9 37%, #eef2f4 63%);
+  background-size: 400px 100%;
+  animation: enogiaShimmer 1.4s ease infinite;
+}
+
+/* Scrollbars discrètes mais visibles, cohérentes avec la palette */
+* { scrollbar-width: thin; scrollbar-color: #a3b3bb transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: #b6c2c9; border-radius: 20px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: #7c8f9a; background-clip: content-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Focus clavier lisible sans casser le style des boutons custom */
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #0d9bb5;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
