@@ -88,12 +88,21 @@ export function PinGate({onUnlock}){
 
 export function ImportButton({onImport, busy, label, accent, helpText, warnText, confirmMessage, hasExisting, inputId}){
   const [open,setOpen]=useState(false);
+  const [pos,setPos]=useState({top:0,left:0});
+  const btnRef=React.useRef(null);
   const [err,setErr]=useState("");
   const [indice,setIndice]=useState("");
   useSheetJS();
   const fileInputId=inputId||"msp-file";
   const btnLabel=label||"Importer un planning MS Project";
   const bg=accent||"linear-gradient(135deg,"+T.teal500+","+T.navy700+")";
+  const openMenu=()=>{
+    if(btnRef.current){
+      const r=btnRef.current.getBoundingClientRect();
+      setPos({top:r.bottom+8,left:Math.min(r.left,window.innerWidth-338)});
+    }
+    setOpen(v=>!v);
+  };
 
   const proceedImport=parsed=>{
     if(hasExisting&&confirmMessage){
@@ -130,12 +139,14 @@ export function ImportButton({onImport, busy, label, accent, helpText, warnText,
   };
 
   return(<div style={{position:"relative",fontFamily:T.font}}>
-    <button onClick={()=>setOpen(v=>!v)} disabled={busy} style={{padding:"9px 17px",borderRadius:10,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:16,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:7,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
+    <button ref={btnRef} onClick={openMenu} disabled={busy} style={{padding:"9px 17px",borderRadius:10,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:16,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:7,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
       onMouseEnter={e=>{if(!busy){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=T.shadowMd;}}}
       onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=T.shadowSm;}}>
       {busy?<span style={{display:"inline-flex",alignItems:"center",gap:8}}><span style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><NavIcon name="upload" size={16}/>{btnLabel}</span>}
     </button>
-    {open&&!busy&&<div style={{position:"absolute",top:"calc(100% + 8px)",right:0,background:T.card,borderRadius:14,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,width:320,padding:18}}>
+    {open&&!busy&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>
+      <div style={{position:"fixed",top:pos.top,left:pos.left,background:T.card,borderRadius:14,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,width:320,padding:18}}>
       <div style={{fontWeight:700,fontSize:19,color:T.ink900,marginBottom:8}}>{btnLabel}</div>
       <div style={{fontSize:15,color:T.ink500,marginBottom:14,lineHeight:1.6}}>
         {helpText||(<>Export Excel (.xlsx) avec colonnes <b>Nom, Début, Niveau hiérarchique</b>.<br/>Niveau 1 = PJ · Niveau 2 = Arrivée / Tests / Fin de production / Départ.</>)}
@@ -154,7 +165,8 @@ export function ImportButton({onImport, busy, label, accent, helpText, warnText,
       </div>
       {err&&<div style={{color:T.red500,fontSize:15,background:T.red100,padding:"8px 12px",borderRadius:8,marginBottom:10,fontWeight:500}}>{err}</div>}
       <div style={{fontSize:14,color:T.ink300,lineHeight:1.5,display:"flex",alignItems:"center",gap:6}}>{warnText||<><NavIcon name="warning" size={13}/>Remplace les données pour tous les visiteurs du site.</>}</div>
-    </div>}
+    </div>
+    </>}
   </div>);
 }
 

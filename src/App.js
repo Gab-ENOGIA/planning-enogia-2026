@@ -20,7 +20,7 @@ const OVERRIDES_DOC_REF=()=>doc(db,"planning","overrides");
 const COMMENTS_DOC_REF=()=>doc(db,"planning","comments");
 const PJ_META_SYNC_DOC_REF=()=>doc(db,"planning","pjMetaSync");
 
-const APP_BUILD_VERSION="2026-07-02-v27-cols-rebalance";
+const APP_BUILD_VERSION="2026-07-02-v28-import-popup-fix";
 console.log("🔵 planning-enogia-2026 build:",APP_BUILD_VERSION);
 
 export default function App(){
