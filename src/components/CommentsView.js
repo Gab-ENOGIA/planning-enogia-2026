@@ -1,45 +1,68 @@
 import React, { useState, useMemo } from "react";
 import { T } from "../theme";
 import { fmt } from "../parsers";
+import { DropFilter } from "./SharedUI";
 
-export function CommentsView({data,comments,addComment,deleteComment}){
+export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCommentMulti,jumpToPj}){
   const [author,setAuthor]=useState("");
   const [selectedPj,setSelectedPj]=useState("");
+  const [multiMode,setMultiMode]=useState(false);
+  const [selectedPjs,setSelectedPjs]=useState(new Set());
   const [text,setText]=useState("");
-  const [filterPj,setFilterPj]=useState("");
+  const [isPrivate,setIsPrivate]=useState(false);
+  const [filterPjs,setFilterPjs]=useState(new Set());
+  const [showAll,setShowAll]=useState(false);
   const [err,setErr]=useState("");
   const [deleteTarget,setDeleteTarget]=useState(null); // {pj,idx}
   const [pinInput,setPinInput]=useState("");
+  const allPjIds=useMemo(()=>data.map(d=>d.pj),[data]);
 
   const allComments=useMemo(()=>{
     const out=[];
     Object.entries(comments).forEach(([pj,list])=>list.forEach((c,idx)=>out.push({...c,pj,_idx:idx})));
     return out.sort((a,b)=>new Date(b.date)-new Date(a.date));
   },[comments]);
-  const filtered=filterPj?allComments.filter(c=>c.pj===filterPj):allComments;
+  const visibleComments=pinOk?allComments:allComments.filter(c=>!c.private);
+  const filtered=(pinOk&&showAll)?visibleComments:(filterPjs.size>0?visibleComments.filter(c=>filterPjs.has(c.pj)):[]);
 
   const submit=async ()=>{
     if(!author.trim()){setErr("Le nom est obligatoire pour publier un commentaire.");return;}
-    if(!text.trim()||!selectedPj)return;
-    setErr("");
-    const ok=await addComment(selectedPj,author,text);
-    if(ok)setText("");
+    if(!text.trim())return;
+    if(multiMode){
+      if(selectedPjs.size===0){setErr("Sélectionnez au moins un PJ.");return;}
+      setErr("");
+      const ok=await addCommentMulti([...selectedPjs],author,text,null,isPrivate);
+      if(ok){setText("");setIsPrivate(false);}
+    }else{
+      if(!selectedPj){setErr("Choisissez un PJ.");return;}
+      setErr("");
+      const ok=await addComment(selectedPj,author,text,null,isPrivate);
+      if(ok){setText("");setIsPrivate(false);}
+    }
   };
   const confirmDelete=async ()=>{
     const ok=await deleteComment(deleteTarget.pj,deleteTarget.idx,pinInput);
     if(ok){setDeleteTarget(null);setPinInput("");}
   };
+  const canSubmit=text.trim()&&(multiMode?selectedPjs.size>0:!!selectedPj);
 
   return(<div style={{display:"flex",flexDirection:"column",gap:16,fontFamily:T.font}}>
     <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:21,color:T.ink900,marginBottom:14}}>💬 Ajouter un commentaire</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:14}}>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:21,color:T.ink900}}>💬 Ajouter un commentaire</div>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500,fontWeight:600,cursor:"pointer"}}>
+          <input type="checkbox" checked={multiMode} onChange={e=>{setMultiMode(e.target.checked);setErr("");}}/> Allouer à plusieurs PJ
+        </label>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:10}}>
         <div>
-          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>N° PJ concerné</label>
-          <select value={selectedPj} onChange={e=>setSelectedPj(e.target.value)} style={{padding:"9px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,background:T.surface,width:"100%"}}>
+          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>{multiMode?"N° PJ concernés":"N° PJ concerné"}</label>
+          {multiMode?
+            <DropFilter label="PJ concernés" options={allPjIds} selected={selectedPjs} onChange={setSelectedPjs}/>
+          :<select value={selectedPj} onChange={e=>setSelectedPj(e.target.value)} style={{padding:"9px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,background:T.surface,width:"100%"}}>
             <option value="">— Choisir un PJ —</option>
             {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
-          </select>
+          </select>}
         </div>
         <div>
           <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>Votre nom (obligatoire)</label>
@@ -50,28 +73,36 @@ export function CommentsView({data,comments,addComment,deleteComment}){
       {err&&<div style={{fontSize:13,color:T.red500,marginBottom:8}}>{err}</div>}
       <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Ajouter un commentaire..." rows={3} maxLength={1000}
         style={{padding:"9px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:15,fontFamily:T.font,color:T.ink700,resize:"vertical",width:"100%",marginBottom:10}}/>
-      <div style={{display:"flex",justifyContent:"flex-end"}}>
-        <button onClick={submit} disabled={!text.trim()||!selectedPj} style={{padding:"9px 20px",borderRadius:9,border:"none",background:text.trim()&&selectedPj?T.teal500:T.surfaceAlt,color:text.trim()&&selectedPj?"#fff":T.ink300,fontSize:15,fontWeight:700,cursor:text.trim()&&selectedPj?"pointer":"default"}}>Publier</button>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
+        {pinOk?<label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500,fontWeight:600,cursor:"pointer"}}>
+          <input type="checkbox" checked={isPrivate} onChange={e=>setIsPrivate(e.target.checked)}/> 🔒 Privé (BU ORC uniquement)
+        </label>:<span/>}
+        <button onClick={submit} disabled={!canSubmit} style={{padding:"9px 20px",borderRadius:9,border:"none",background:canSubmit?T.teal500:T.surfaceAlt,color:canSubmit?"#fff":T.ink300,fontSize:15,fontWeight:700,cursor:canSubmit?"pointer":"default"}}>Publier</button>
       </div>
     </div>
 
     <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:14}}>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.ink900}}>Tous les commentaires ({filtered.length})</div>
-        <select value={filterPj} onChange={e=>setFilterPj(e.target.value)} style={{padding:"7px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,background:T.surface}}>
-          <option value="">Tous les PJ</option>
-          {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
-        </select>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:19,color:T.ink900}}>{(pinOk&&showAll)?"Tous les commentaires":"Commentaires filtrés"} ({filtered.length})</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          {!(pinOk&&showAll)&&<DropFilter label="Filtrer par PJ" options={allPjIds} selected={filterPjs} onChange={setFilterPjs}/>}
+          {pinOk&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500,fontWeight:600,cursor:"pointer"}}>
+            <input type="checkbox" checked={showAll} onChange={e=>setShowAll(e.target.checked)}/> Voir tous les commentaires (Manager)
+          </label>}
+        </div>
       </div>
-      {filtered.length===0&&<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"30px 0"}}>Aucun commentaire pour l'instant.</div>}
+      {filtered.length===0&&<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"30px 0"}}>
+        {(pinOk&&showAll)?"Aucun commentaire pour l'instant.":"Sélectionnez un ou plusieurs PJ ci-dessus pour afficher leurs commentaires."}
+      </div>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {filtered.map(c=>{
           const isTarget=deleteTarget&&deleteTarget.pj===c.pj&&deleteTarget.idx===c._idx;
-          return(<div key={c.pj+"-"+c._idx} style={{background:T.surface,borderRadius:10,padding:"12px 16px"}}>
+          return(<div key={c.pj+"-"+c._idx} style={{background:c.private?T.amber100:T.surface,borderRadius:10,padding:"12px 16px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5,flexWrap:"wrap",gap:6}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontWeight:700,color:T.teal600,fontSize:15}}>{c.pj}</span>
-                <span style={{fontWeight:700,color:T.ink900,fontSize:14}}>{c.author}</span>
+                <span onClick={()=>jumpToPj&&jumpToPj(c.pj)} style={{fontWeight:700,color:T.teal600,fontSize:15,cursor:jumpToPj?"pointer":"default",textDecoration:jumpToPj?"underline":"none"}}>{c.pj}</span>
+                <span style={{fontWeight:700,color:T.ink900,fontSize:14}}>{c.private&&"🔒 "}{c.author}</span>
+                {c.groupPjs&&<span title={"Commentaire groupé : "+c.groupPjs.join(", ")} style={{fontSize:11,color:T.violet600,background:T.violet100,borderRadius:5,padding:"1px 6px",fontWeight:700}}>groupé ×{c.groupPjs.length}</span>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:12,color:T.ink300}}>{new Date(c.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>

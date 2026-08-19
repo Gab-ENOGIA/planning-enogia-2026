@@ -19,8 +19,16 @@ const INITIAL_DOC_REF=()=>doc(db,"planning","initial");
 const OVERRIDES_DOC_REF=()=>doc(db,"planning","overrides");
 const COMMENTS_DOC_REF=()=>doc(db,"planning","comments");
 const PJ_META_SYNC_DOC_REF=()=>doc(db,"planning","pjMetaSync");
+const DELAYS_DOC_REF=()=>doc(db,"planning","delays");
+const DELAY_TYPES_DOC_REF=()=>doc(db,"planning","delayTypes");
 
-const APP_BUILD_VERSION="2026-07-02-v28-import-popup-fix";
+// Types de retard génériques par défaut — éditables depuis le panel Manager (onglet Retards)
+const DEFAULT_DELAY_TYPES=[
+  "Retard paiement FNR","NC FNR","NC interne","Retard fournisseur",
+  "Aléas planning client","Retard études","Manque de main d'œuvre","Autre",
+];
+
+const APP_BUILD_VERSION="2026-08-19-v29-manager-privacy-fiche-retards";
 console.log("🔵 planning-enogia-2026 build:",APP_BUILD_VERSION);
 
 export default function App(){
@@ -86,6 +94,10 @@ export default function App(){
   const [closurePeriods,setClosurePeriods]=useState([]);
   const [productionExclusions,setProductionExclusions]=useState({});
   const [comments,setComments]=useState({});
+  const [delays,setDelays]=useState({});
+  const [delayTypes,setDelayTypes]=useState(DEFAULT_DELAY_TYPES);
+  const [tableJumpPj,setTableJumpPj]=useState(null);
+  const jumpToPj=useCallback(pj=>{setView("table");setTableJumpPj(pj);},[]);
 
   // Lecture temps réel depuis Firestore
   useEffect(()=>{
@@ -196,11 +208,30 @@ export default function App(){
     setSyncingORC(false);
   },[]);
 
-  const addComment=useCallback(async (pj,author,text,linkedDate)=>{
+  const addComment=useCallback(async (pj,author,text,linkedDate,isPrivate)=>{
     if(!author.trim()||!text.trim())return false;
     const current=comments[pj]||[];
-    const next=[...current,{author:author.trim(),text:text.trim(),date:new Date().toISOString(),linkedDate:linkedDate||null}];
+    const next=[...current,{author:author.trim(),text:text.trim(),date:new Date().toISOString(),linkedDate:linkedDate||null,private:!!isPrivate}];
     const nextAll={...comments,[pj]:next};
+    try{
+      await setDoc(COMMENTS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement du commentaire : " + e.message);
+      return false;
+    }
+  },[comments]);
+
+  // Ajoute le même commentaire à plusieurs PJ à la fois (ex. décalage affectant toute une ligne de projets)
+  const addCommentMulti=useCallback(async (pjList,author,text,linkedDate,isPrivate)=>{
+    if(!author.trim()||!text.trim()||!pjList||pjList.length===0)return false;
+    const groupId=pjList.length>1?(Date.now()+"-"+Math.random().toString(36).slice(2,7)):null;
+    const nextAll={...comments};
+    pjList.forEach(pj=>{
+      const current=nextAll[pj]||comments[pj]||[];
+      nextAll[pj]=[...current,{author:author.trim(),text:text.trim(),date:new Date().toISOString(),linkedDate:linkedDate||null,private:!!isPrivate,groupId,groupPjs:pjList.length>1?pjList:undefined}];
+    });
     try{
       await setDoc(COMMENTS_DOC_REF(), { byPj:nextAll }, { merge:true });
       return true;
@@ -225,6 +256,69 @@ export default function App(){
       return false;
     }
   },[comments]);
+
+  // Lecture temps réel des allocations de retard par PJ
+  useEffect(()=>{
+    const unsub = onSnapshot(DELAYS_DOC_REF(), (snap)=>{
+      if(snap.exists())setDelays(snap.data().byPj || {});
+    }, (err)=>{
+      console.error("Erreur Firestore (delays):", err);
+    });
+    return ()=>unsub();
+  },[]);
+
+  // Lecture temps réel des types de retard génériques (configurables par le Manager)
+  useEffect(()=>{
+    const unsub = onSnapshot(DELAY_TYPES_DOC_REF(), (snap)=>{
+      if(snap.exists()&&Array.isArray(snap.data().types)&&snap.data().types.length>0){
+        setDelayTypes(snap.data().types);
+      }
+    }, (err)=>{
+      console.error("Erreur Firestore (delayTypes):", err);
+    });
+    return ()=>unsub();
+  },[]);
+
+  const addDelayAllocation=useCallback(async (pj,type,days,note,author)=>{
+    if(!type||!days||isNaN(days))return false;
+    const current=delays[pj]||[];
+    const entry={id:Date.now()+"-"+Math.random().toString(36).slice(2,7),type,days:Math.round(Number(days)),note:(note||"").trim(),author:(author||"").trim(),date:new Date().toISOString()};
+    const nextAll={...delays,[pj]:[...current,entry]};
+    try{
+      await setDoc(DELAYS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement du retard : " + e.message);
+      return false;
+    }
+  },[delays]);
+
+  const deleteDelayAllocation=useCallback(async (pj,id,pin)=>{
+    if(pin!==PIN){alert("Code incorrect.");return false;}
+    const current=delays[pj]||[];
+    const next=current.filter(d=>d.id!==id);
+    const nextAll={...delays,[pj]:next};
+    try{
+      await setDoc(DELAYS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de la suppression : " + e.message);
+      return false;
+    }
+  },[delays]);
+
+  const setDelayTypesAndSave=useCallback(async next=>{
+    try{
+      await setDoc(DELAY_TYPES_DOC_REF(), { types:next }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement des types de retard : " + e.message);
+      return false;
+    }
+  },[]);
 
   const setClientPresenceFor=useCallback(async (pj,value)=>{
     const next={...clientPresence,[pj]:value};
@@ -417,7 +511,8 @@ export default function App(){
               tab={managerTab} setTab={setManagerTab} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}
               closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriodsAndSave}
               productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}
-              pjMetaSyncInfo={pjMetaSyncInfo} syncingORC={syncingORC} syncORCError={syncORCError} syncFromSuiviORC={syncFromSuiviORC}/>
+              pjMetaSyncInfo={pjMetaSyncInfo} syncingORC={syncingORC} syncORCError={syncORCError} syncFromSuiviORC={syncFromSuiviORC}
+              comments={comments} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypesAndSave}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(
@@ -433,19 +528,23 @@ export default function App(){
               selMoisTests={selMoisTests} setSelMoisTests={setSelMoisTests}
               selMoisFinProd={selMoisFinProd} setSelMoisFinProd={setSelMoisFinProd}
               selMoisDepart={selMoisDepart} setSelMoisDepart={setSelMoisDepart}
-              comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
+              comments={comments} addComment={addComment} deleteComment={deleteComment}
+              pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}
+              externalSel={tableJumpPj} setExternalSel={setTableJumpPj}/>}
             {view==="gantt"&&<GanttView data={filtered} progress={progress} df={df}/>}
             {view==="calendar"&&<CalendarView data={filtered} onSelectPj={setCalSel}
               mode={calMode} setMode={setCalMode} anchor={calAnchor} setAnchor={setCalAnchor}
               dayAnchor={calDayAnchor} setDayAnchor={setCalDayAnchor} closurePeriods={closurePeriods}
               productionExclusions={productionExclusions} comments={comments} addComment={addComment}
-              zoomLevel={calZoom} setZoomLevel={setCalZoom}/>}
-            {view==="comments"&&<CommentsView data={filtered} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
+              zoomLevel={calZoom} setZoomLevel={setCalZoom} pinOk={pinOk}/>}
+            {view==="comments"&&<CommentsView data={filtered} comments={comments} addComment={addComment} deleteComment={deleteComment}
+              pinOk={pinOk} addCommentMulti={addCommentMulti} jumpToPj={jumpToPj}/>}
           </div>
         )}
       </>
     )}
-    {calSel&&<ProjectModal pj={calSel} data={dataWithOverrides} df={df} onClose={()=>setCalSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
+    {calSel&&<ProjectModal pj={calSel} data={dataWithOverrides} df={df} onClose={()=>setCalSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}
+      pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}/>}
     <span title="Version du code actuellement chargée" style={{position:"fixed",bottom:10,right:12,background:T.ink100,color:T.ink500,borderRadius:7,padding:"3px 11px",fontSize:12,fontWeight:600,fontFamily:"monospace",zIndex:9999,opacity:0.85}}>build {APP_BUILD_VERSION}</span>
   </div>);
 }

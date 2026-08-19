@@ -75,8 +75,10 @@ export function ResizeHandle({colId,nextColId,colWidths,setColWidths}){
   };
   return <div onMouseDown={onMouseDown} style={{position:"absolute",right:-3,top:0,bottom:0,width:6,cursor:"col-resize",zIndex:3}}/>;
 }
-export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart,comments,addComment,deleteComment}){
-  const [sel,setSel]=useState(null);
+export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart,comments,addComment,deleteComment,pinOk,delays,delayTypes,addDelayAllocation,deleteDelayAllocation,externalSel,setExternalSel}){
+  const [selInternal,setSelInternal]=useState(null);
+  const sel=externalSel!==undefined?externalSel:selInternal;
+  const setSel=setExternalSel||setSelInternal;
   const [hiddenCols,setHiddenCols]=useState(new Set());
   const [colWidths,setColWidths]=useState(DEFAULT_COL_WIDTHS_PCT);
   useSheetJS();
@@ -184,7 +186,8 @@ export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSe
       })}</tbody>
     </table>
     </div>
-    {sel&&<ProjectModal pj={sel} data={data} df={df} onClose={()=>setSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}/>}
+    {sel&&<ProjectModal pj={sel} data={data} df={df} onClose={()=>setSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}
+      pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}/>}
   </div>);
 }
 

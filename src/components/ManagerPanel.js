@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 import { T } from "../theme";
-import { getPjMeta, initials, PersonIcon, GAMME_COLORS, ETAT_META, ALL_ETATS, ASSIGNABLE_ETATS, ALL_GAMMES, MONTHS, MONTHS_FULL, today } from "../pjMeta";
+import { getPjMeta, initials, PersonIcon, CountryFlag, GAMME_COLORS, ETAT_META, ALL_ETATS, ASSIGNABLE_ETATS, ALL_GAMMES, MONTHS, MONTHS_FULL, today } from "../pjMeta";
 import { fmt, toLocalISO, diffDays, weekStartOf } from "../parsers";
 import { Badge, DropFilter, ImportButton, NavIcon } from "./SharedUI";
 
@@ -18,7 +18,7 @@ export function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMon
     </select>}
   </div>);
 }
-export function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,toggleProductionExclusion,pjMetaSyncInfo,syncingORC,syncORCError,syncFromSuiviORC}){
+export function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,toggleProductionExclusion,pjMetaSyncInfo,syncingORC,syncORCError,syncFromSuiviORC,comments,delays,delayTypes,setDelayTypes}){
   const [fEtat,setFEtat]=useState(new Set(ALL_ETATS));
   const [kpiStep,setKpiStep]=useState("depart");
   const [chargeYear,setChargeYear]=useState(null);
@@ -330,7 +330,7 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
       {syncORCError&&<div style={{fontSize:14,color:T.red600,background:T.red100,padding:"8px 12px",borderRadius:8,width:"100%",display:"flex",alignItems:"center",gap:7}}><NavIcon name="warning" size={14}/>{syncORCError}</div>}
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      {[["derives","chart","KPIs & Dérives"],["avancement","gauge","Avancement"],["statut","tag","Statut & État"],["vacances","sun","Vacances"],["production","factory","Production"]].map(([id,icon,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"9px 16px",borderRadius:10,border:"none",background:tab===id?"linear-gradient(145deg,"+T.teal500+","+T.teal600+")":T.surface,color:tab===id?"#fff":T.ink700,fontWeight:600,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:tab===id?T.neuInSm:T.neuOutSm,transition:"box-shadow .15s ease"}}><NavIcon name={icon} size={15}/>{l}</button>)}
+      {[["fiche","list","Fiche Projet"],["retards","warning","Retards"],["derives","chart","KPIs & Dérives"],["avancement","gauge","Avancement"],["statut","tag","Statut & État"],["vacances","sun","Vacances"],["production","factory","Production"]].map(([id,icon,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"9px 16px",borderRadius:10,border:"none",background:tab===id?"linear-gradient(145deg,"+T.teal500+","+T.teal600+")":T.surface,color:tab===id?"#fff":T.ink700,fontWeight:600,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:tab===id?T.neuInSm:T.neuOutSm,transition:"box-shadow .15s ease"}}><NavIcon name={icon} size={15}/>{l}</button>)}
     </div>
     {tab==="derives"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
@@ -841,8 +841,235 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
       })}
     </div>}
 
+    {tab==="fiche"&&<ProjectFileManager data={data} initialData={initialData} comments={comments} delays={delays}/>}
+    {tab==="retards"&&<DelaysManager data={data} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypes}/>}
     {tab==="vacances"&&<ClosurePeriodsManager closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriods}/>}
     {tab==="production"&&<ProductionCalendarManager data={data} productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}/>}
+  </div>);
+}
+
+// ── Vue globale des causes de retard : répartition par type, top PJ contributeurs, gestion des types ──
+const DELAY_COLORS=[T.red500,T.amber500,T.violet500,T.teal500,"#e8821a",T.emerald500,T.navy600,T.ink500];
+function DelaysManager({data,delays,delayTypes,setDelayTypes}){
+  const [newType,setNewType]=useState("");
+
+  const allEntries=useMemo(()=>{
+    const out=[];
+    Object.entries(delays||{}).forEach(([pj,list])=>(list||[]).forEach(d=>out.push({...d,pj})));
+    return out;
+  },[delays]);
+
+  const byType=useMemo(()=>{
+    const m={};
+    allEntries.forEach(e=>{m[e.type]=(m[e.type]||0)+(e.days||0);});
+    return Object.entries(m).map(([type,days],i)=>({type,days,c:DELAY_COLORS[i%DELAY_COLORS.length]})).sort((a,b)=>b.days-a.days);
+  },[allEntries]);
+
+  const byPj=useMemo(()=>{
+    const m={};
+    allEntries.forEach(e=>{m[e.pj]=(m[e.pj]||0)+(e.days||0);});
+    return Object.entries(m).map(([pj,days])=>({pj,days})).sort((a,b)=>b.days-a.days).slice(0,10);
+  },[allEntries]);
+
+  const totalDays=allEntries.reduce((a,e)=>a+(e.days||0),0);
+  const maxTypeDays=Math.max(...byType.map(t=>t.days),1);
+  const maxPjDays=Math.max(...byPj.map(t=>t.days),1);
+
+  const addType=()=>{
+    const v=newType.trim();
+    if(!v||delayTypes.includes(v))return;
+    setDelayTypes([...delayTypes,v]);
+    setNewType("");
+  };
+  const removeType=t=>{
+    if(delayTypes.length<=1)return;
+    setDelayTypes(delayTypes.filter(x=>x!==t));
+  };
+
+  return(<div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
+      {[[totalDays+"j","Total jours de retard alloués",T.red500],[allEntries.length,"Allocations enregistrées",T.teal500],[byType.length,"Types de retard utilisés",T.violet500]].map(([v,l,c])=>(
+        <div key={l} style={{background:T.card,borderRadius:12,padding:"14px 16px",borderTop:"3px solid "+c,boxShadow:T.shadowMd}}>
+          <div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:T.ink900}}>{v}</div>
+          <div style={{fontSize:14,color:T.ink500,fontWeight:600,marginTop:3}}>{l}</div>
+        </div>
+      ))}
+    </div>
+
+    <div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
+      <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Répartition globale par cause de retard</div>
+      <div style={{fontSize:13,color:T.ink300,marginBottom:12}}>Qu'est-ce qui génère le plus de retard sur l'ensemble du portefeuille ?</div>
+      {byType.length===0?<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"20px 0"}}>Aucune allocation de retard enregistrée pour l'instant.</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {byType.map(t=>(
+            <div key={t.type}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:4}}>
+                <span style={{fontWeight:600,color:T.ink700}}>{t.type}</span>
+                <span style={{fontWeight:700,color:T.ink900}}>{t.days}j · {Math.round(t.days/totalDays*100)}%</span>
+              </div>
+              <div style={{background:T.surfaceAlt,borderRadius:6,height:12,overflow:"hidden"}}>
+                <div style={{width:(t.days/maxTypeDays*100)+"%",height:"100%",background:t.c,borderRadius:6}}/>
+              </div>
+            </div>
+          ))}
+        </div>}
+    </div>
+
+    <div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
+      <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Top PJ — jours de retard cumulés</div>
+      <div style={{fontSize:13,color:T.ink300,marginBottom:12}}>Les projets qui concentrent le plus de retard, toutes causes confondues</div>
+      {byPj.length===0?<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"20px 0"}}>Aucune donnée.</div>:
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {byPj.map(p=>(
+            <div key={p.pj} style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{width:90,fontWeight:700,color:T.teal600,fontSize:14,flexShrink:0}}>{p.pj}</span>
+              <div style={{flex:1,background:T.surfaceAlt,borderRadius:6,height:12,overflow:"hidden"}}>
+                <div style={{width:(p.days/maxPjDays*100)+"%",height:"100%",background:T.red500,borderRadius:6}}/>
+              </div>
+              <span style={{width:36,textAlign:"right",fontWeight:700,color:T.ink900,fontSize:14,flexShrink:0}}>{p.days}j</span>
+            </div>
+          ))}
+        </div>}
+    </div>
+
+    <div style={{background:T.card,borderRadius:12,padding:16,boxShadow:T.shadowMd}}>
+      <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.ink900,marginBottom:10}}>Types de retard génériques</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+        {delayTypes.map(t=>(
+          <span key={t} style={{display:"flex",alignItems:"center",gap:6,background:T.surface,borderRadius:8,padding:"6px 10px 6px 12px",fontSize:14,color:T.ink700,fontWeight:600}}>
+            {t}
+            <button onClick={()=>removeType(t)} disabled={delayTypes.length<=1} title="Supprimer ce type" style={{background:"none",border:"none",color:delayTypes.length<=1?T.ink100:T.ink300,cursor:delayTypes.length<=1?"default":"pointer",fontSize:14,padding:0}}>✕</button>
+          </span>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <input type="text" value={newType} onChange={e=>setNewType(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addType();}} placeholder="Nouveau type de retard..." maxLength={60}
+          style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
+        <button onClick={addType} disabled={!newType.trim()} style={{padding:"8px 16px",borderRadius:8,border:"none",background:newType.trim()?T.teal500:T.surfaceAlt,color:newType.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:newType.trim()?"pointer":"default"}}>Ajouter</button>
+      </div>
+    </div>
+  </div>);
+}
+
+// ── Fiche projet complète (Manager) : dates, historique commentaires (y compris privés), causes de retard, infos ──
+function ProjectFileManager({data,initialData,comments,delays}){
+  const [search,setSearch]=useState("");
+  const [selPj,setSelPj]=useState(data[0]?.pj||null);
+  const initialByPj=useMemo(()=>{const m={};(initialData||[]).forEach(r=>{m[r.pj]=r;});return m;},[initialData]);
+  const filteredList=useMemo(()=>{
+    const q=search.trim().toLowerCase();
+    if(!q)return data;
+    return data.filter(r=>{
+      const meta=getPjMeta(r.pj,r);
+      return r.pj.toLowerCase().includes(q)||(meta.nomProjet||"").toLowerCase().includes(q)||(meta.pays||"").toLowerCase().includes(q)||(meta.chefProjet||"").toLowerCase().includes(q);
+    });
+  },[data,search]);
+  const r=data.find(x=>x.pj===selPj);
+  const meta=r?getPjMeta(r.pj,r):null;
+  const ini=r?initialByPj[r.pj]:null;
+  const PHASES_F=[["arrivee","Arrivée"],["tests","Tests"],["finProd","Fin de production"],["depart","Départ"]];
+  const pjComments=useMemo(()=>{
+    if(!r)return[];
+    return (comments?.[r.pj]||[]).map((c,i)=>({...c,_idx:i})).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  },[comments,r]);
+  const pjDelays=useMemo(()=>{
+    if(!r)return[];
+    return [...(delays?.[r.pj]||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  },[delays,r]);
+  const totalDelayDays=pjDelays.reduce((a,d)=>a+(d.days||0),0);
+
+  return(<div style={{display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
+    <div style={{background:T.card,borderRadius:12,boxShadow:T.shadowMd,width:280,flexShrink:0,maxHeight:720,display:"flex",flexDirection:"column"}}>
+      <div style={{padding:12,borderBottom:"1px solid "+T.line}}>
+        <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un PJ, projet, pays, chef..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,boxSizing:"border-box"}}/>
+      </div>
+      <div style={{overflowY:"auto",flex:1}}>
+        {filteredList.map(row=>{
+          const m=getPjMeta(row.pj,row);
+          const nCom=(comments?.[row.pj]||[]).length;
+          const nDel=(delays?.[row.pj]||[]).length;
+          return(<div key={row.pj} onClick={()=>setSelPj(row.pj)} style={{padding:"10px 14px",cursor:"pointer",background:selPj===row.pj?T.teal100:T.card,borderBottom:"1px solid "+T.surface}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
+              <span style={{fontWeight:700,color:T.teal600,fontSize:15}}>{row.pj}</span>
+              <span style={{fontSize:11,color:T.ink300}}>{nCom>0&&"💬"+nCom}{nDel>0&&" ⏱️"+nDel}</span>
+            </div>
+            <div style={{fontSize:13,color:T.ink500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.nomProjet}</div>
+          </div>);
+        })}
+        {filteredList.length===0&&<div style={{padding:20,textAlign:"center",color:T.ink300,fontSize:14}}>Aucun résultat.</div>}
+      </div>
+    </div>
+
+    <div style={{flex:1,minWidth:320,display:"flex",flexDirection:"column",gap:14}}>
+      {!r?<div style={{background:T.card,borderRadius:12,padding:30,textAlign:"center",color:T.ink300,boxShadow:T.shadowMd}}>Sélectionnez un PJ dans la liste.</div>:<>
+        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+            <div>
+              <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:24,color:T.ink900}}>{r.pj}</div>
+              <div style={{color:T.ink500,fontSize:15,marginTop:3,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>{meta.nomProjet} · <CountryFlag pays={meta.pays} size={13}/> {meta.pays} · {meta.chefProjet}</div>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <Badge etat={r.etat}/>
+              <span style={{fontSize:14,color:T.ink500,fontWeight:600}}>{r.gamme}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:16,color:T.ink900,marginBottom:10}}>Dates</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr repeat(3,auto)",gap:"8px 16px",fontSize:14,alignItems:"baseline"}}>
+            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Jalon</div>
+            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Initial</div>
+            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Révisé</div>
+            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Δ</div>
+            {PHASES_F.map(([k,label])=>{
+              const iv=ini?ini[k]:null;
+              const rv=r[k];
+              const delta=(iv&&rv)?diffDays(new Date(iv),new Date(rv)):null;
+              return(<React.Fragment key={k}>
+                <div style={{fontWeight:600,color:T.ink700}}>{label}</div>
+                <div style={{color:T.ink500}}>{iv?fmt(new Date(iv)):"—"}</div>
+                <div style={{fontWeight:700,color:T.ink900}}>{rv?fmt(new Date(rv)):"—"}</div>
+                <div style={{fontWeight:700,color:delta==null?T.ink300:delta>0?T.red500:delta<0?T.emerald600:T.ink500}}>{delta==null?"—":(delta>0?"+":"")+delta+"j"}</div>
+              </React.Fragment>);
+            })}
+          </div>
+        </div>
+
+        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:16,color:T.ink900,marginBottom:10}}>⏱️ Causes de retard ({pjDelays.length}{totalDelayDays>0?" · "+totalDelayDays+"j":""})</div>
+          {pjDelays.length===0?<div style={{color:T.ink300,fontSize:14}}>Aucune cause de retard enregistrée.</div>:
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {pjDelays.map(d=>(
+                <div key={d.id} style={{background:T.surface,borderRadius:9,padding:"9px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                    <span style={{fontWeight:700,color:T.ink900,fontSize:14}}>{d.type} — {d.days}j</span>
+                    <span style={{fontSize:12,color:T.ink300}}>{d.author} · {new Date(d.date).toLocaleDateString("fr-FR")}</span>
+                  </div>
+                  {d.note&&<div style={{fontSize:13,color:T.ink500,marginTop:3}}>{d.note}</div>}
+                </div>
+              ))}
+            </div>}
+        </div>
+
+        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:16,color:T.ink900,marginBottom:10}}>💬 Historique commentaires ({pjComments.length})</div>
+          {pjComments.length===0?<div style={{color:T.ink300,fontSize:14}}>Aucun commentaire.</div>:
+            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:400,overflowY:"auto"}}>
+              {pjComments.map(c=>(
+                <div key={c._idx} style={{background:c.private?T.amber100:T.surface,borderRadius:9,padding:"9px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                    <span style={{fontWeight:700,color:T.teal600,fontSize:13}}>{c.private&&"🔒 "}{c.author}{c.groupPjs&&<span style={{marginLeft:6,fontSize:11,color:T.violet600,background:T.violet100,borderRadius:5,padding:"1px 6px",fontWeight:700}}>groupé ×{c.groupPjs.length}</span>}</span>
+                    <span style={{fontSize:12,color:T.ink300}}>{new Date(c.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                  </div>
+                  <div style={{fontSize:13,color:T.ink700,whiteSpace:"pre-wrap",marginTop:3}}>{c.text}</div>
+                  {c.linkedDate&&<div style={{marginTop:4,fontSize:12,color:T.ink500,fontWeight:600}}>☁️ Lié au {fmt(new Date(c.linkedDate))}</div>}
+                </div>
+              ))}
+            </div>}
+        </div>
+      </>}
+    </div>
   </div>);
 }
 
@@ -966,4 +1193,3 @@ export function ProductionCalendarManager({data,productionExclusions,toggleProdu
     </div>}
   </div>);
 }
-

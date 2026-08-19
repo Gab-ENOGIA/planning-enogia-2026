@@ -60,7 +60,7 @@ export function getDayStatus(r,day,excludedDates){
   });
   return milestones.length?milestones.join(" + "):null;
 }
-export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor,closurePeriods,productionExclusions,comments,addComment,zoomLevel,setZoomLevel}){
+export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayAnchor,setDayAnchor,closurePeriods,productionExclusions,comments,addComment,zoomLevel,setZoomLevel,pinOk}){
   const isClosurePeriod=(colStart,colEnd)=>{
     if(!closurePeriods||!closurePeriods.length)return false;
     return closurePeriods.some(p=>{
@@ -74,6 +74,7 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   const [commentAuthor,setCommentAuthor]=useState("");
   const [commentText,setCommentText]=useState("");
   const [commentErr,setCommentErr]=useState("");
+  const [commentPrivate,setCommentPrivate]=useState(false);
   const WEEK_COUNTS=[6,8,14,24,36];
   const DAY_COUNTS=[9,14,21,35,52,84,168,252];
   const maxZoomLevel=mode==="week"?WEEK_COUNTS.length-1:DAY_COUNTS.length-1;
@@ -221,7 +222,7 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
               const closed=isClosurePeriod(d,dEnd);
               const cellBg=closed?T.ink100:isTodayCol?T.teal500+"22":isWE?T.surfaceAlt:rowBg;
               const iso=toLocalISO(d);
-              const dayComments=(comments?.[pj]||[]).filter(c=>c.linkedDate===iso);
+              const dayComments=(comments?.[pj]||[]).filter(c=>c.linkedDate===iso&&(pinOk||!c.private));
               const hasComment=dayComments.length>0;
               const openCommentPopup=e=>{
                 e.stopPropagation();
@@ -265,11 +266,11 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
         </div>
 
         {(()=>{
-          const dayComments=(comments?.[commentPopup.pj]||[]).filter(c=>c.linkedDate===commentPopup.dateIso);
+          const dayComments=(comments?.[commentPopup.pj]||[]).filter(c=>c.linkedDate===commentPopup.dateIso&&(pinOk||!c.private));
           return dayComments.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14,maxHeight:180,overflowY:"auto"}}>
             {dayComments.map((c,i)=>(
-              <div key={i} style={{background:T.surface,borderRadius:9,padding:"9px 12px"}}>
-                <div style={{fontWeight:700,color:T.teal600,fontSize:13,marginBottom:3}}>{c.author}</div>
+              <div key={i} style={{background:c.private?T.amber100:T.surface,borderRadius:9,padding:"9px 12px"}}>
+                <div style={{fontWeight:700,color:T.teal600,fontSize:13,marginBottom:3}}>{c.private&&"🔒 "}{c.author}</div>
                 <div style={{fontSize:13,color:T.ink700,whiteSpace:"pre-wrap"}}>{c.text}</div>
               </div>
             ))}
@@ -281,12 +282,15 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
         {commentErr&&<div style={{fontSize:13,color:T.red500,marginBottom:6}}>{commentErr}</div>}
         <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Votre commentaire..." rows={3} maxLength={1000}
           style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,resize:"vertical",width:"100%",boxSizing:"border-box",marginBottom:10}}/>
-        <div style={{display:"flex",justifyContent:"flex-end"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          {pinOk?<label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.ink500,fontWeight:600,cursor:"pointer"}}>
+            <input type="checkbox" checked={commentPrivate} onChange={e=>setCommentPrivate(e.target.checked)}/> 🔒 Privé
+          </label>:<span/>}
           <button onClick={async ()=>{
             if(!commentAuthor.trim()){setCommentErr("Le nom est obligatoire pour publier un commentaire.");return;}
             if(!commentText.trim())return;
-            const ok=await addComment(commentPopup.pj,commentAuthor,commentText,commentPopup.dateIso);
-            if(ok){setCommentText("");setCommentAuthor("");}
+            const ok=await addComment(commentPopup.pj,commentAuthor,commentText,commentPopup.dateIso,commentPrivate);
+            if(ok){setCommentText("");setCommentAuthor("");setCommentPrivate(false);}
           }} disabled={!commentText.trim()} style={{padding:"8px 18px",borderRadius:8,border:"none",background:commentText.trim()?T.teal500:T.surfaceAlt,color:commentText.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:commentText.trim()?"pointer":"default"}}>Publier</button>
         </div>
       </div>

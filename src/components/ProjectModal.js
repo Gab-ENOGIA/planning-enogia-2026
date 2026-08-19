@@ -5,7 +5,7 @@ import { fmt, fmtMode } from "../parsers";
 import { Badge } from "./SharedUI";
 import { PHASES } from "./GanttView";
 
-export function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComment}){
+export function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComment,pinOk,delays,delayTypes,addDelayAllocation,deleteDelayAllocation}){
   const r=data.find(x=>x.pj===pj);
   if(!r)return null;
   const meta=getPjMeta(pj,r);
@@ -81,14 +81,16 @@ export function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComme
         {PHASES.map(ph=><span key={ph.k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><span style={{width:13,height:13,borderRadius:4,background:ph.c}}/><span style={{color:T.ink500}}>{ph.t}</span></span>)}
       </div>
 
-      <ProjectComments pj={pj} comments={comments?.[pj]||[]} addComment={addComment} deleteComment={deleteComment}/>
+      <ProjectComments pj={pj} comments={comments?.[pj]||[]} addComment={addComment} deleteComment={deleteComment} pinOk={pinOk}/>
+      {pinOk&&delayTypes&&<DelayAllocations pj={pj} delays={delays?.[pj]||[]} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}/>}
     </div>
   </div>);
 }
 
-export function ProjectComments({pj,comments,addComment,deleteComment}){
+export function ProjectComments({pj,comments,addComment,deleteComment,pinOk}){
   const [author,setAuthor]=useState("");
   const [text,setText]=useState("");
+  const [isPrivate,setIsPrivate]=useState(false);
   const [err,setErr]=useState("");
   const [deleteTarget,setDeleteTarget]=useState(null); // index original du commentaire à supprimer
   const [pinInput,setPinInput]=useState("");
@@ -96,30 +98,36 @@ export function ProjectComments({pj,comments,addComment,deleteComment}){
     if(!author.trim()){setErr("Le nom est obligatoire pour publier un commentaire.");return;}
     if(!text.trim())return;
     setErr("");
-    const ok=await addComment(pj,author,text);
-    if(ok)setText("");
+    const ok=await addComment(pj,author,text,null,isPrivate);
+    if(ok){setText("");setIsPrivate(false);}
   };
   const confirmDelete=async ()=>{
     const ok=await deleteComment(pj,deleteTarget,pinInput);
     if(ok){setDeleteTarget(null);setPinInput("");}
   };
   const withIndex=comments.map((c,i)=>({...c,_idx:i}));
-  const sorted=[...withIndex].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const visible=pinOk?withIndex:withIndex.filter(c=>!c.private);
+  const sorted=[...visible].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return(<div style={{marginTop:20,paddingTop:16,borderTop:"1px solid "+T.line}}>
-    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.ink900,marginBottom:10}}>💬 Commentaires ({comments.length})</div>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.ink900,marginBottom:10}}>💬 Commentaires ({sorted.length})</div>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
       <input type="text" value={author} onChange={e=>{setAuthor(e.target.value);setErr("");}} placeholder="Votre nom (obligatoire)" maxLength={40}
         style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+(err?T.red500:T.line),fontSize:14,fontFamily:T.font,color:T.ink700}}/>
       {err&&<span style={{fontSize:13,color:T.red500}}>{err}</span>}
       <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Ajouter un commentaire..." rows={3} maxLength={1000}
         style={{padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,resize:"vertical"}}/>
-      <button onClick={submit} disabled={!text.trim()} style={{alignSelf:"flex-end",padding:"8px 18px",borderRadius:8,border:"none",background:text.trim()?T.teal500:T.surfaceAlt,color:text.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:text.trim()?"pointer":"default"}}>Publier</button>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+        {pinOk?<label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500,fontWeight:600,cursor:"pointer"}}>
+          <input type="checkbox" checked={isPrivate} onChange={e=>setIsPrivate(e.target.checked)}/> 🔒 Privé (BU ORC uniquement)
+        </label>:<span/>}
+        <button onClick={submit} disabled={!text.trim()} style={{padding:"8px 18px",borderRadius:8,border:"none",background:text.trim()?T.teal500:T.surfaceAlt,color:text.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:text.trim()?"pointer":"default"}}>Publier</button>
+      </div>
     </div>
     {sorted.length>0&&<div style={{display:"flex",flexDirection:"column",gap:10,maxHeight:300,overflowY:"auto"}}>
       {sorted.map(c=>(
-        <div key={c._idx} style={{background:T.surface,borderRadius:10,padding:"10px 14px"}}>
+        <div key={c._idx} style={{background:c.private?T.amber100:T.surface,borderRadius:10,padding:"10px 14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4,gap:8}}>
-            <span style={{fontWeight:700,color:T.teal600,fontSize:14}}>{c.author}</span>
+            <span style={{fontWeight:700,color:T.teal600,fontSize:14,display:"flex",alignItems:"center",gap:5}}>{c.private&&"🔒"}{c.author}{c.groupPjs&&<span title={"Commentaire groupé : "+c.groupPjs.join(", ")} style={{fontSize:11,color:T.violet600,background:T.violet100,borderRadius:5,padding:"1px 6px",fontWeight:700}}>groupé ×{c.groupPjs.length}</span>}</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:12,color:T.ink300}}>{new Date(c.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
               <button onClick={()=>{setDeleteTarget(c._idx);setPinInput("");}} title="Supprimer" style={{background:"none",border:"none",color:T.ink300,cursor:"pointer",fontSize:14,padding:0}}>✕</button>
@@ -130,6 +138,69 @@ export function ProjectComments({pj,comments,addComment,deleteComment}){
           {deleteTarget===c._idx&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+T.line,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
             <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} placeholder="Code Manager" style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,width:120}}/>
             <button onClick={confirmDelete} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.red500,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer la suppression</button>
+            <button onClick={()=>setDeleteTarget(null)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:T.surface,boxShadow:T.neuOutSm,color:T.ink700,fontSize:13,cursor:"pointer"}}>Annuler</button>
+          </div>}
+        </div>
+      ))}
+    </div>}
+  </div>);
+}
+
+// ── Allocation des jours de retard par cause générique, pour un PJ donné (visible Manager uniquement) ──
+function DelayAllocations({pj,delays,delayTypes,addDelayAllocation,deleteDelayAllocation}){
+  const [type,setType]=useState(delayTypes[0]||"");
+  const [days,setDays]=useState("");
+  const [note,setNote]=useState("");
+  const [author,setAuthor]=useState("");
+  const [err,setErr]=useState("");
+  const [deleteTarget,setDeleteTarget]=useState(null);
+  const [pinInput,setPinInput]=useState("");
+  const submit=async ()=>{
+    if(!author.trim()){setErr("Le nom est obligatoire.");return;}
+    if(!type){setErr("Choisissez un type de retard.");return;}
+    const n=Number(days);
+    if(!days||isNaN(n)||n<=0){setErr("Indiquez un nombre de jours valide.");return;}
+    setErr("");
+    const ok=await addDelayAllocation(pj,type,n,note,author);
+    if(ok){setDays("");setNote("");}
+  };
+  const confirmDelete=async ()=>{
+    const ok=await deleteDelayAllocation(pj,deleteTarget,pinInput);
+    if(ok){setDeleteTarget(null);setPinInput("");}
+  };
+  const byType={};
+  delays.forEach(d=>{byType[d.type]=(byType[d.type]||0)+(d.days||0);});
+  return(<div style={{marginTop:20,paddingTop:16,borderTop:"1px solid "+T.line}}>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:17,color:T.ink900,marginBottom:10}}>⏱️ Causes de retard ({delays.length})</div>
+    {Object.keys(byType).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+      {Object.entries(byType).map(([t,d])=><span key={t} style={{background:T.surface,borderRadius:7,padding:"4px 10px",fontSize:13,color:T.ink700,fontWeight:600}}>{t} · {d}j</span>)}
+    </div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:10}}>
+      <select value={type} onChange={e=>setType(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,background:T.card}}>
+        {delayTypes.map(t=><option key={t} value={t}>{t}</option>)}
+      </select>
+      <input type="number" min="1" value={days} onChange={e=>{setDays(e.target.value);setErr("");}} placeholder="Jours" style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
+      <input type="text" value={author} onChange={e=>{setAuthor(e.target.value);setErr("");}} placeholder="Votre nom" maxLength={40} style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (optionnel)" maxLength={300} style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
+      <button onClick={submit} style={{padding:"8px 18px",borderRadius:8,border:"none",background:T.teal500,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Allouer</button>
+    </div>
+    {err&&<div style={{fontSize:13,color:T.red500,marginBottom:8}}>{err}</div>}
+    {delays.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:220,overflowY:"auto"}}>
+      {[...delays].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(d=>(
+        <div key={d.id} style={{background:T.surface,borderRadius:10,padding:"9px 12px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+            <span style={{fontWeight:700,color:T.ink900,fontSize:14}}>{d.type} — {d.days}j</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:T.ink300}}>{d.author} · {new Date(d.date).toLocaleDateString("fr-FR")}</span>
+              <button onClick={()=>{setDeleteTarget(d.id);setPinInput("");}} title="Supprimer" style={{background:"none",border:"none",color:T.ink300,cursor:"pointer",fontSize:14,padding:0}}>✕</button>
+            </div>
+          </div>
+          {d.note&&<div style={{fontSize:13,color:T.ink500,marginTop:3}}>{d.note}</div>}
+          {deleteTarget===d.id&&<div style={{marginTop:8,paddingTop:8,borderTop:"1px solid "+T.line,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <input type="password" value={pinInput} onChange={e=>setPinInput(e.target.value)} placeholder="Code Manager" style={{padding:"6px 10px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,width:120}}/>
+            <button onClick={confirmDelete} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.red500,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Confirmer</button>
             <button onClick={()=>setDeleteTarget(null)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:T.surface,boxShadow:T.neuOutSm,color:T.ink700,fontSize:13,cursor:"pointer"}}>Annuler</button>
           </div>}
         </div>
