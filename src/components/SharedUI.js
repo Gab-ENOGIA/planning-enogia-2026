@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { T } from "../theme";
-import { ETAT_META } from "../pjMeta";
+import { ETAT_META, getPjMeta } from "../pjMeta";
 import { parseMSProjectRows } from "../parsers";
 
 export function useSheetJS(){
@@ -15,7 +15,9 @@ export function useSheetJS(){
   return ready;
 }
 
-export function Badge({etat}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];const urgent=etat==="NOT ORDERED";return <span className={urgent?"enogia-pulse-urgent":""} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:20,padding:"4px 12px 4px 9px",fontSize:14,fontWeight:600,letterSpacing:".01em",display:"inline-flex",alignItems:"center",gap:6,boxShadow:"0 1px 2px rgba(15,40,60,.08)",maxWidth:"100%",boxSizing:"border-box"}}><span style={{width:7,height:7,borderRadius:"50%",background:c.bar,flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.label||etat}</span></span>;}
+// Réduit encore (demandé explicitement : "réduire la police pour l'état") — la pastille garde son
+// fond/bordure propres mais passe sous la taille du reste des colonnes du tableau.
+export function Badge({etat}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];const urgent=etat==="NOT ORDERED";return <span className={urgent?"enogia-pulse-urgent":""} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:20,padding:"2.5px 10px 2.5px 8px",fontSize:12,fontWeight:600,letterSpacing:".01em",display:"inline-flex",alignItems:"center",gap:5,boxShadow:"0 1px 2px rgba(15,40,60,.08)",maxWidth:"100%",boxSizing:"border-box"}}><span style={{width:6,height:6,borderRadius:"50%",background:c.bar,flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.label||etat}</span></span>;}
 
 export function DropFilter({label,options,selected,onChange,getLabel,icon}){
   const [open,setOpen]=useState(false);
@@ -34,35 +36,99 @@ export function DropFilter({label,options,selected,onChange,getLabel,icon}){
   };
   return(
     <span style={{position:"relative",display:"inline-block"}} onClick={e=>e.stopPropagation()}>
-      <button ref={btnRef} onClick={openMenu} style={icon?{padding:"3px 5px",borderRadius:6,border:"none",background:!all?T.teal100:"transparent",color:!all?T.teal600:T.ink300,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",verticalAlign:"middle",marginLeft:4}:{padding:"10px 17px",borderRadius:10,border:"1.5px solid "+(!all||open?T.teal500:T.line),background:!all?T.teal100:T.card,color:!all?T.teal600:T.ink700,fontSize:16,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",fontFamily:T.font,transition:"border-color .15s"}}>
-        {icon?(!all?"▼("+selected.size+")":"▼"):(<>{label}{!all?" ("+selected.size+")":""}<span style={{fontSize:12,color:T.ink500}}>{open?"▲":"▼"}</span></>)}
+      {/* Bouton resserré (demandé explicitement : "les filtres ... sont trop grandes ... plus
+          discret") — mêmes proportions sur le Gantt et le Calendrier (et ici, partout où ce
+          composant est utilisé). */}
+      <button ref={btnRef} onClick={openMenu} style={icon?{padding:"2px 4px",borderRadius:6,border:"none",background:!all?T.teal100:"transparent",color:!all?T.teal600:T.ink300,fontSize:11,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle",marginLeft:4}:{padding:"5px 10px",borderRadius:8,border:"1px solid "+(!all||open?T.teal500:T.line),background:!all?T.teal100:T.card,color:!all?T.teal600:T.ink700,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",fontFamily:T.font,transition:"border-color .15s"}}>
+        {icon?(<>{!all&&selected.size}<NavIcon name="chevronDown" size={10}/></>):(<>{label}{!all?" ("+selected.size+")":""}<NavIcon name="chevronDown" size={11}/></>)}
       </button>
+      {/* Popover affiné (demandé explicitement : "les filtres sur les colonnes sont grossiers quand
+          on clique dessus, la police est trop grande") — police et cases à cocher réduites, coins et
+          ombre resserrés pour rester dans le même registre que le reste de l'appli. */}
       {open&&<>
         <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>
-        <div style={{position:"fixed",top:pos.top,left:pos.left,background:T.card,borderRadius:12,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,minWidth:210,maxHeight:320,display:"flex",flexDirection:"column",fontFamily:T.font}}>
-          <div onClick={()=>onChange(all?new Set():new Set(options))} style={{display:"flex",alignItems:"center",gap:9,padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid "+T.line,background:T.surface,flexShrink:0,borderRadius:"12px 12px 0 0"}}>
-            <div style={{width:16,height:16,borderRadius:4,border:"1.5px solid "+(all?T.teal500:T.ink100),background:all?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              {all&&<span style={{color:"#fff",fontSize:13,fontWeight:700}}>✓</span>}
-              {!all&&!none&&<span style={{color:T.teal600,fontSize:14,fontWeight:700}}>—</span>}
+        <div style={{position:"fixed",top:pos.top,left:pos.left,background:T.card,borderRadius:10,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,minWidth:190,maxHeight:300,display:"flex",flexDirection:"column",fontFamily:T.font}}>
+          <div onClick={()=>onChange(all?new Set():new Set(options))} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid "+T.line,background:T.surface,flexShrink:0,borderRadius:"10px 10px 0 0"}}>
+            <div style={{width:13,height:13,borderRadius:4,border:"1.5px solid "+(all?T.teal500:T.ink100),background:all?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              {all&&<span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}
+              {!all&&!none&&<span style={{color:T.teal600,fontSize:11,fontWeight:700}}>—</span>}
             </div>
-            <span style={{fontSize:16,fontWeight:700,color:T.ink700}}>Tout sélectionner</span>
+            <span style={{fontSize:12.5,fontWeight:700,color:T.ink700}}>Tout sélectionner</span>
           </div>
           <div style={{overflowY:"auto",flex:1}}>
             {options.map(o=>{const a=selected.has(o);return(
-              <div key={o} onClick={()=>toggle(o)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 14px",cursor:"pointer",background:a?T.teal100:T.card,borderBottom:"1px solid "+T.surface}}>
-                <div style={{width:16,height:16,borderRadius:4,border:"1.5px solid "+(a?T.teal500:T.ink100),background:a?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{a&&<span style={{color:"#fff",fontSize:13,fontWeight:700}}>✓</span>}</div>
-                <span style={{fontSize:16,color:T.ink700,fontWeight:a?600:400}}>{disp(o)}</span>
+              <div key={o} onClick={()=>toggle(o)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",cursor:"pointer",background:a?T.teal100:T.card,borderBottom:"1px solid "+T.surface}}>
+                <div style={{width:13,height:13,borderRadius:4,border:"1.5px solid "+(a?T.teal500:T.ink100),background:a?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{a&&<span style={{color:"#fff",fontSize:10,fontWeight:700}}>✓</span>}</div>
+                <span style={{fontSize:12.5,color:T.ink700,fontWeight:a?600:400}}>{disp(o)}</span>
               </div>
             );})}
           </div>
-          <div style={{padding:"8px 14px",borderTop:"1px solid "+T.line,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surface,flexShrink:0,borderRadius:"0 0 12px 12px"}}>
-            <span style={{fontSize:14,color:T.ink500,fontWeight:500}}>{selected.size}/{options.length}</span>
-            <button onClick={()=>setOpen(false)} style={{padding:"4px 14px",borderRadius:7,border:"none",background:T.teal500,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>OK</button>
+          <div style={{padding:"7px 12px",borderTop:"1px solid "+T.line,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surface,flexShrink:0,borderRadius:"0 0 10px 10px"}}>
+            <span style={{fontSize:11.5,color:T.ink500,fontWeight:500}}>{selected.size}/{options.length}</span>
+            <button onClick={()=>setOpen(false)} style={{padding:"4px 12px",borderRadius:6,border:"none",background:T.teal500,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>OK</button>
           </div>
         </div>
       </>}
     </span>
   );
+}
+
+// Liste déroulante "premium" (demandé explicitement : près des commentaires/retards, le choix de
+// liste "manque de premium") — un <select> natif reste dessous pour l'accessibilité et le picker
+// natif mobile, mais son rendu par défaut (flèche système, look plat) est masqué et remplacé par le
+// même habillage que le reste de l'appli (bordure fine, coins arrondis, chevron maison).
+export function Select({value,onChange,options,getLabel,placeholder,style}){
+  const disp=o=>getLabel?getLabel(o):o;
+  return(
+    <div style={{position:"relative",display:"inline-block",width:style?.width||"100%"}}>
+      <select value={value} onChange={onChange} style={{appearance:"none",WebkitAppearance:"none",MozAppearance:"none",width:"100%",padding:"8px 30px 8px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:13.5,fontWeight:600,fontFamily:T.font,color:T.ink700,background:T.card,cursor:"pointer",...style}}>
+        {placeholder&&<option value="" disabled>{placeholder}</option>}
+        {options.map(o=>(typeof o==="object"?<option key={o.value} value={o.value}>{o.label}</option>:<option key={o} value={o}>{disp(o)}</option>))}
+      </select>
+      <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:T.ink300}}><NavIcon name="chevronDown" size={11}/></span>
+    </div>
+  );
+}
+
+// ── Liste de PJ à cocher, toujours visible (pas un menu déroulant caché) — utilisée partout où on
+// doit choisir plusieurs PJ à la fois : commentaires groupés, allocation de retard groupée, etc.
+export function PjChecklist({data,selected,onChange,maxHeight=220}){
+  const [search,setSearch]=useState("");
+  const q=search.trim().toLowerCase();
+  const filtered=q?data.filter(d=>{
+    const meta=getPjMeta(d.pj,d);
+    return d.pj.toLowerCase().includes(q)||(meta.nomProjet||"").toLowerCase().includes(q);
+  }):data;
+  const toggle=pj=>{const s=new Set(selected);s.has(pj)?s.delete(pj):s.add(pj);onChange(s);};
+  const allChecked=filtered.length>0&&filtered.every(d=>selected.has(d.pj));
+  const toggleAll=()=>{
+    const s=new Set(selected);
+    if(allChecked)filtered.forEach(d=>s.delete(d.pj));
+    else filtered.forEach(d=>s.add(d.pj));
+    onChange(s);
+  };
+  return(<div style={{border:"1px solid "+T.line,borderRadius:10,background:T.card,overflow:"hidden"}}>
+    <div style={{padding:8,borderBottom:"1px solid "+T.line,display:"flex",gap:8,alignItems:"center",background:T.surface}}>
+      <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un PJ, un projet..." style={{flex:1,padding:"6px 9px",borderRadius:7,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,color:T.ink700,background:T.card}}/>
+      <span style={{fontSize:12,color:T.ink500,fontWeight:700,whiteSpace:"nowrap"}}>{selected.size} sélectionné{selected.size!==1?"s":""}</span>
+    </div>
+    <div onClick={toggleAll} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",cursor:"pointer",borderBottom:"1px solid "+T.line}}>
+      <div style={{width:15,height:15,borderRadius:4,border:"1.5px solid "+(allChecked?T.teal500:T.ink100),background:allChecked?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{allChecked&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}</div>
+      <span style={{fontSize:12.5,fontWeight:700,color:T.ink700}}>Tout sélectionner{q?" (résultats filtrés)":""}</span>
+    </div>
+    <div style={{maxHeight,overflowY:"auto"}}>
+      {filtered.map(d=>{
+        const meta=getPjMeta(d.pj,d);
+        const checked=selected.has(d.pj);
+        return(<div key={d.pj} onClick={()=>toggle(d.pj)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",cursor:"pointer",background:checked?T.teal100:"transparent",borderBottom:"1px solid "+T.surface}}>
+          <div style={{width:15,height:15,borderRadius:4,border:"1.5px solid "+(checked?T.teal500:T.ink100),background:checked?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{checked&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}</div>
+          <span style={{fontWeight:700,color:T.ink900,fontSize:13,fontFamily:T.fontMono,flexShrink:0}}>{d.pj}</span>
+          <span style={{fontSize:12.5,color:T.ink500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet}</span>
+        </div>);
+      })}
+      {filtered.length===0&&<div style={{padding:14,textAlign:"center",color:T.ink300,fontSize:12.5}}>Aucun résultat.</div>}
+    </div>
+  </div>);
 }
 
 
@@ -71,8 +137,8 @@ export function PinGate({onUnlock}){
   const [v,setV]=useState("");const [err,setErr]=useState(false);
   const check=()=>{if(v===PIN)onUnlock();else{setErr(true);setV("");setTimeout(()=>setErr(false),1200);}};
   return(<div style={{background:T.card,borderRadius:16,padding:36,maxWidth:300,margin:"40px auto",boxShadow:T.shadowLg,textAlign:"center",fontFamily:T.font}}>
-    <div style={{fontSize:38,marginBottom:10}}>🔒</div>
-    <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:22,color:T.ink900,marginBottom:18}}>Accès Manager</div>
+    <div style={{width:48,height:48,margin:"0 auto 14px",borderRadius:12,background:T.surface,boxShadow:T.neuInSm,color:T.teal600,display:"flex",alignItems:"center",justifyContent:"center"}}><NavIcon name="lock" size={22}/></div>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:22,color:T.ink900,marginBottom:18}}>Accès Manager</div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,maxWidth:190,margin:"0 auto 14px"}}>
       {[1,2,3,4,5,6,7,8,9,"","0","⌫"].map((k,i)=><button key={i} onClick={()=>{if(k==="⌫")setV(x=>x.slice(0,-1));else if(k!=="")setV(x=>x.length<4?x+k:x);}} style={{height:48,borderRadius:12,border:"none",background:k===""?"transparent":T.surface,boxShadow:k===""?"none":T.neuOutSm,fontSize:21,fontWeight:600,cursor:k===""?"default":"pointer",color:T.ink900,transition:"box-shadow .1s ease"}}
         onMouseDown={e=>{if(k!=="")e.currentTarget.style.boxShadow=T.neuInSm;}}
@@ -139,10 +205,10 @@ export function ImportButton({onImport, busy, label, accent, helpText, warnText,
   };
 
   return(<div style={{position:"relative",fontFamily:T.font}}>
-    <button ref={btnRef} onClick={openMenu} disabled={busy} style={{padding:"9px 17px",borderRadius:10,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:16,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:7,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
-      onMouseEnter={e=>{if(!busy){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=T.shadowMd;}}}
+    <button ref={btnRef} onClick={openMenu} disabled={busy} style={{padding:"5px 9px",borderRadius:7,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:11,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:5,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
+      onMouseEnter={e=>{if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=T.shadowMd;}}}
       onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=T.shadowSm;}}>
-      {busy?<span style={{display:"inline-flex",alignItems:"center",gap:8}}><span style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:8}}><NavIcon name="upload" size={16}/>{btnLabel}</span>}
+      {busy?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NavIcon name="upload" size={10}/>{btnLabel}</span>}
     </button>
     {open&&!busy&&<>
       <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>
@@ -194,6 +260,12 @@ export function NavIcon({name,size=18}){
     case"moon":return(<svg {...p}><path d="M16 11.5A6.5 6.5 0 1 1 8.5 4a5.2 5.2 0 0 0 7.5 7.5z"/></svg>);
     case"download":return(<svg {...p}><path d="M10 3v9"/><path d="M6.5 8.5 10 12l3.5-3.5"/><path d="M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14"/></svg>);
     case"inbox":return(<svg {...p}><path d="M3 10h4.2l1.3 2.4h2.9L12.7 10H17"/><rect x="3" y="10" width="14" height="6.5" rx="1.5"/><path d="M6 10 8 4h4l2 6"/></svg>);
+    case"logout":return(<svg {...p}><path d="M8 17H4.5a1.5 1.5 0 0 1-1.5-1.5v-11A1.5 1.5 0 0 1 4.5 3H8"/><path d="M13 14l4-4-4-4"/><line x1="17" y1="10" x2="7.5" y2="10"/></svg>);
+    case"clock":return(<svg {...p}><circle cx="10" cy="10" r="7.2"/><path d="M10 5.8V10l3 2"/></svg>);
+    case"settings":return(<svg {...p}><circle cx="10" cy="10" r="2.6"/><path d="M10 2.8v2.4M10 14.8v2.4M4.2 6.1l2 1.2M13.8 12.7l2 1.2M2.8 10h2.4M14.8 10h2.4M4.2 13.9l2-1.2M13.8 7.3l2-1.2"/></svg>);
+    case"save":return(<svg {...p}><path d="M4 4h9l3 3v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M7 4v4h6V4"/><rect x="6.5" y="11.5" width="7" height="5"/></svg>);
+    case"close":return(<svg {...p}><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>);
+    case"chevronDown":return(<svg {...p}><polyline points="5 7.5 10 12.5 15 7.5"/></svg>);
     default:return null;
   }
 }

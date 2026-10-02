@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { T } from "../theme";
-import { getPjMeta, initials, DriftDot, PersonIcon, CountryFlag, ETAT_META, ALL_ETATS, ALL_GAMMES, MONTHS, today } from "../pjMeta";
+import { getPjMeta, initials, personTint, DriftDot, PersonIcon, CountryFlag, ETAT_META, ALL_ETATS, ALL_GAMMES, GAMME_COLORS, MONTHS, today } from "../pjMeta";
 import { fmt, diffDays, fmtMode } from "../parsers";
 import { useSheetJS, Badge, DropFilter, NavIcon } from "./SharedUI";
 import { ProjectModal } from "./ProjectModal";
@@ -28,7 +28,7 @@ export function ColumnPicker({hidden,setHidden}){
     setOpen(v=>!v);
   };
   return(<span style={{position:"relative",display:"inline-block"}}>
-    <button ref={btnRef} onClick={openMenu} style={{padding:"8px 15px",borderRadius:10,border:"none",background:hidden.size>0?T.teal100:T.surface,color:hidden.size>0?T.teal600:T.ink700,fontSize:15,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:hidden.size>0?T.neuInSm:T.neuOutSm}}>⚙ Colonnes{hidden.size>0?" ("+(TABLE_COLUMNS.length-hidden.size)+"/"+TABLE_COLUMNS.length+")":""}</button>
+    <button ref={btnRef} onClick={openMenu} style={{padding:"6px 12px",borderRadius:8,border:"none",background:hidden.size>0?T.teal100:T.card,color:hidden.size>0?T.teal600:T.ink700,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:hidden.size>0?T.neuInSm:T.neuOutSm}}><span style={{color:T.teal500,display:"flex"}}><NavIcon name="settings" size={12}/></span>Colonnes{hidden.size>0?" ("+(TABLE_COLUMNS.length-hidden.size)+"/"+TABLE_COLUMNS.length+")":""}</button>
     {open&&<>
       <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>
       <div style={{position:"fixed",top:pos.top,left:pos.left,background:T.card,borderRadius:12,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,minWidth:200,maxHeight:340,overflowY:"auto",fontFamily:T.font}}>
@@ -43,7 +43,34 @@ export function ColumnPicker({hidden,setHidden}){
     </>}
   </span>);
 }
-export const DEFAULT_COL_WIDTHS_PCT={pj:7,projet:11,pays:8,chef:7,gamme:5,etat:13,arrivee:7,tests:10,finprod:7,depart:7,avancement:8,commentaires:7};
+// Sélecteur d'affichage des dates (Jours / Semaines / Mois), déplacé ici depuis l'en-tête
+// global de l'application (qui ne doit plus porter que le titre) — se présente comme les
+// autres réglages de la vue liste (bouton + menu flottant, même famille que ColumnPicker).
+export function DateFormatPicker({df,setDf}){
+  const [open,setOpen]=useState(false);
+  const [pos,setPos]=useState({top:0,left:0});
+  const btnRef=React.useRef(null);
+  const LABELS={date:"Jours",semaine:"Semaines",mois:"Mois"};
+  const openMenu=()=>{
+    if(btnRef.current){const r=btnRef.current.getBoundingClientRect();setPos({top:r.bottom+4,left:Math.min(r.left,window.innerWidth-170)});}
+    setOpen(v=>!v);
+  };
+  return(<span style={{position:"relative",display:"inline-block"}}>
+    <button ref={btnRef} onClick={openMenu} style={{padding:"6px 12px",borderRadius:8,border:"none",background:T.card,color:T.ink700,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:T.neuOutSm}}>
+      <span style={{color:T.teal500,display:"flex"}}><NavIcon name="calendar" size={12}/></span>Affichage : {LABELS[df]}
+    </button>
+    {open&&<>
+      <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>
+      <div style={{position:"fixed",top:pos.top,left:pos.left,background:T.card,borderRadius:10,boxShadow:T.shadowLg,border:"1px solid "+T.line,zIndex:9999,minWidth:150,overflow:"hidden",fontFamily:T.font}}>
+        {Object.entries(LABELS).map(([k,l])=><div key={k} onClick={()=>{setDf(k);setOpen(false);}} style={{padding:"9px 14px",cursor:"pointer",fontSize:13.5,fontWeight:df===k?700:500,color:df===k?T.teal600:T.ink700,background:df===k?T.teal100:"transparent"}}>{l}</div>)}
+      </div>
+    </>}
+  </span>);
+}
+// Gamme/Projet/Pays élargis (ils étaient tronqués par l'ellipsis vu leur contenu — "Ajuster
+// automatiquement les colonnes pour qu'on puisse voir toutes les données") ; État réduit en
+// contrepartie car le badge est déjà compact depuis la réduction de sa police.
+export const DEFAULT_COL_WIDTHS_PCT={pj:7,projet:14,pays:9,chef:6,gamme:8,etat:10,arrivee:7,tests:10,finprod:7,depart:7,avancement:8,commentaires:7};
 export function ResizeHandle({colId,nextColId,colWidths,setColWidths}){
   const onMouseDown=e=>{
     e.preventDefault();
@@ -75,7 +102,7 @@ export function ResizeHandle({colId,nextColId,colWidths,setColWidths}){
   };
   return <div onMouseDown={onMouseDown} style={{position:"absolute",right:-3,top:0,bottom:0,width:6,cursor:"col-resize",zIndex:3}}/>;
 }
-export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart,comments,addComment,deleteComment,pinOk,delays,delayTypes,addDelayAllocation,deleteDelayAllocation,externalSel,setExternalSel}){
+export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes,setSelGammes,allPJs,selPJs,setSelPJs,allProjets,selProjets,setSelProjets,allPays,selPays,setSelPays,allChefs,selChefs,setSelChefs,selMoisArrivee,setSelMoisArrivee,selMoisTests,setSelMoisTests,selMoisFinProd,setSelMoisFinProd,selMoisDepart,setSelMoisDepart,comments,addComment,deleteComment,pinOk,delays,delayTypes,addDelayAllocation,deleteDelayAllocation,addDelayComment,deleteDelayComment,externalSel,setExternalSel,authorName,savePjMetaOverride,canEditMeta}){
   const [selInternal,setSelInternal]=useState(null);
   const sel=externalSel!==undefined?externalSel:selInternal;
   const setSel=setExternalSel||setSelInternal;
@@ -114,15 +141,36 @@ export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSe
   // Liste ordonnée des colonnes actuellement visibles, pour savoir quelle est "la suivante" lors du redimensionnement
   const visibleColOrder=["pj","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement"].filter(id=>id==="pj"||show(id));
   const nextVisible=id=>{const i=visibleColOrder.indexOf(id);return i>=0&&i<visibleColOrder.length-1?visibleColOrder[i+1]:null;};
-  const thBase={padding:"10px 14px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:15,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".04em",position:"relative",overflow:"hidden"};
-  return(<div style={{background:T.surface,borderRadius:16,boxShadow:T.neuOut,fontFamily:T.font}}>
-    <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.line,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:10}}>
-      <button onClick={exportToExcel} style={{padding:"9px 17px",borderRadius:10,border:"none",background:T.surface,color:T.teal600,fontSize:15,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:7,boxShadow:T.neuOutSm,transition:"box-shadow .15s ease"}}
-        onMouseDown={e=>e.currentTarget.style.boxShadow=T.neuInSm} onMouseUp={e=>e.currentTarget.style.boxShadow=T.neuOutSm} onMouseLeave={e=>e.currentTarget.style.boxShadow=T.neuOutSm}><NavIcon name="download" size={15}/>Export Excel</button>
+  const thBase={padding:"12px 16px",textAlign:"left",fontWeight:600,color:T.ink500,fontSize:12.5,whiteSpace:"nowrap",position:"relative",overflow:"hidden"};
+  // Pas de cadre ni de carte ici (demandé explicitement : trop de bordures plus foncées que le
+  // crème, ça faisait "bizarre") — aucun fond propre sur ce bloc, ni sur la barre d'outils, ni
+  // sur l'en-tête du tableau, ni sur les lignes par défaut : tout reste au même crème que la
+  // page. Seuls les boutons de la barre d'outils gardent un fond blanc (affordance de clic), et
+  // un unique filet fin sépare la barre d'outils du tableau — le reste ne s'appuie que sur
+  // l'espacement, pas sur des traits.
+  // Mise en page à deux colonnes : la liste (qui peut rétrécir) + la fiche projet persistante à
+  // droite (qui se met à jour au clic sur une ligne, demandé explicitement — plus de pop-up qui
+  // s'ouvre/se ferme). flexWrap fait repasser la fiche sous le tableau sur un écran étroit plutôt
+  // que de l'écraser, pour rester responsive.
+  // alignItems par défaut (stretch, pas flex-start) : la colonne de droite doit être aussi haute
+  // que la liste pour que son panneau "position:sticky" ait la place de suivre le défilement sur
+  // toute la hauteur de la liste, plutôt que de décrocher après le premier écran — demandé
+  // explicitement ("ça doit être un élément qui suit le défilement vers le bas").
+  return(<div style={{display:"flex",gap:20,flexWrap:"wrap",fontFamily:T.font}}>
+  <div style={{flex:"3 1 560px",minWidth:0}}>
+    <div style={{padding:"13px 4px",display:"flex",justifyContent:"flex-end",alignItems:"center",gap:10}}>
+      {setDf&&<DateFormatPicker df={df} setDf={setDf}/>}
+      <button onClick={exportToExcel} style={{padding:"6px 12px",borderRadius:8,border:"none",background:T.card,color:T.ink700,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:T.neuOutSm,transition:"box-shadow .15s ease"}}
+        onMouseDown={e=>e.currentTarget.style.boxShadow=T.neuInSm} onMouseUp={e=>e.currentTarget.style.boxShadow=T.neuOutSm} onMouseLeave={e=>e.currentTarget.style.boxShadow=T.neuOutSm}><span style={{color:T.teal500,display:"flex"}}><NavIcon name="download" size={12}/></span>Export Excel</button>
       <ColumnPicker hidden={hiddenCols} setHidden={setHiddenCols}/>
     </div>
-    <div style={{overflowX:"auto",overflowY:"visible"}}>
-    <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
+    <div style={{overflowX:"auto",overflowY:"visible",padding:"0 4px"}}>
+    {/* tableLayout:"auto" (plus "fixed") : les largeurs de colonnes ci-dessous ne sont plus que des
+        points de départ — le navigateur élargit automatiquement une colonne si son contenu ne
+        rentre pas, au lieu de le tronquer avec "..." ("ajuster automatiquement les colonnes pour
+        qu'on puisse voir toutes les données"). Le défilement horizontal du conteneur parent prend
+        le relais si la somme dépasse la largeur visible. */}
+    <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"auto",fontVariantNumeric:"tabular-nums"}}>
       <colgroup>
         <col style={{width:cw("pj")}}/>
         {show("projet")&&<col style={{width:cw("projet")}}/>}
@@ -136,7 +184,7 @@ export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSe
         {show("depart")&&<col style={{width:cw("depart")}}/>}
         {show("avancement")&&<col style={{width:cw("avancement")}}/>}
       </colgroup>
-      <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line,position:"sticky",top:0,zIndex:10}}>
+      <thead><tr style={{background:T.surface,boxShadow:"0 1px 0 "+T.line,position:"sticky",top:0,zIndex:10}}>
         <th style={thBase}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs||new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths}/></th>
         {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets||new Set(allProjets)} onChange={setSelProjets}/>}<ResizeHandle colId="projet" nextColId={nextVisible("projet")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
         {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays||new Set(allPays)} onChange={setSelPays}/>}<ResizeHandle colId="pays" nextColId={nextVisible("pays")} colWidths={colWidths} setColWidths={setColWidths}/></th>}
@@ -156,38 +204,56 @@ export function TableView({data,progress,df,selEtats,setSelEtats,selGammes,setSe
         const done=r.etat==="SHIPPED";
         const pval=progress[r.pj];
         const meta=getPjMeta(r.pj,r);
-        const rowBg=sel===r.pj?T.teal100:(i%2===0?T.card:T.surface);
-        return(<tr key={i} onClick={()=>setSel(sel===r.pj?null:r.pj)} style={{borderBottom:"1px solid "+T.surface,cursor:"pointer",background:rowBg,transition:"background .12s ease"}}
-          onMouseEnter={e=>{if(sel!==r.pj)e.currentTarget.style.background=T.teal100+"80";}}
-          onMouseLeave={e=>{if(sel!==r.pj)e.currentTarget.style.background=rowBg;}}>
-          <td style={{padding:"13px 16px",fontWeight:700,color:T.teal600,fontSize:16,fontFamily:T.fontMono,letterSpacing:"-.01em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span style={{display:"inline-flex",alignItems:"center",gap:7}}>{r.pj}<DriftDot drift={r.drift}/></span></td>
-          {show("projet")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet}</td>}
-          {show("pays")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><CountryFlag pays={meta.pays} size={13}/> {meta.pays}</span></td>}
-          {show("chef")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{initials(meta.chefProjet)}</td>}
-          {show("gamme")&&<td style={{padding:"13px 16px",color:T.ink500,fontSize:15,fontFamily:T.fontMono,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.gamme}</td>}
-          {show("etat")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><Badge etat={r.etat}/></td>}
-          {show("arrivee")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,fontFamily:T.fontMono,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
-          {show("tests")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,fontFamily:T.fontMono,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            {r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}
-            {r.clientPresence?.present&&<span title={"Client/NOBO présent"+(r.clientPresence.date?" le "+r.clientPresence.date:"")} style={{marginLeft:7,fontSize:13,background:T.red100,color:T.red500,borderRadius:5,padding:"2px 6px",fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}><PersonIcon size={12} color={T.red500}/>{r.clientPresence.date?" "+fmt(new Date(r.clientPresence.date)):""}</span>}
+        const isSel=sel===r.pj;
+        // Même fond que la page (T.surface) par défaut, plutôt qu'une carte blanche — demandé
+        // explicitement pour que la liste et la page ne fassent plus qu'un seul aplat.
+        const rowBg=isSel?T.teal100:T.surface;
+        const [avTint,avTintBg]=personTint(meta.chefProjet);
+        return(<tr key={i} onClick={()=>setSel(sel===r.pj?null:r.pj)} style={{borderBottom:"1px solid "+T.surfaceAlt,borderLeft:"2px solid "+(isSel?T.teal500:"transparent"),cursor:"pointer",background:rowBg,transition:"background .1s ease, border-color .1s ease"}}
+          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.surfaceAlt;}}
+          onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background=rowBg;}}>
+          <td style={{padding:"10px 16px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+              <span style={{fontFamily:T.fontMono,fontWeight:500,color:T.ink900,fontSize:13.5}}>{r.pj}</span>
+              <DriftDot drift={r.drift}/>
+            </span>
+          </td>
+          {show("projet")&&<td style={{padding:"10px 16px",color:T.ink900,fontSize:13.5,whiteSpace:"nowrap",fontWeight:600,letterSpacing:"-.005em"}}>{meta.nomProjet}</td>}
+          {show("pays")&&<td style={{padding:"10px 16px",color:T.ink500,fontSize:13.5,whiteSpace:"nowrap"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><CountryFlag pays={meta.pays} size={14}/> {meta.pays}</span></td>}
+          {show("chef")&&<td style={{padding:"10px 16px",whiteSpace:"nowrap",textAlign:"center"}}>
+            <span title={meta.chefProjet} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:22,height:22,borderRadius:"50%",background:avTintBg,color:avTint,fontSize:10,fontWeight:700,flexShrink:0}}>{initials(meta.chefProjet)}</span>
           </td>}
-          {show("finprod")&&<td style={{padding:"13px 16px",color:T.ink700,fontSize:16,fontFamily:T.fontMono,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
-          {show("depart")&&<td style={{padding:"13px 16px",fontWeight:700,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:16,fontFamily:T.fontMono,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
-          {show("avancement")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap",overflow:"hidden"}}>
-            {pval!=null?<div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:48,background:T.surfaceAlt,borderRadius:5,height:7,overflow:"hidden"}}><div style={{width:pval+"%",height:"100%",background:pval>=100?T.emerald500:pval>=50?T.teal500:T.amber500}}/></div><span style={{fontSize:15,fontWeight:700,color:T.ink700,fontFamily:T.fontMono}}>{pval}%</span></div>
+          {show("gamme")&&<td style={{padding:"10px 16px",color:T.ink500,fontSize:13.5,whiteSpace:"nowrap"}}><span style={{display:"inline-flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:GAMME_COLORS[r.gamme]||T.ink300,flexShrink:0}}/>{r.gamme}</span></td>}
+          {show("etat")&&<td style={{padding:"10px 16px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><Badge etat={r.etat}/></td>}
+          {show("arrivee")&&<td style={{padding:"10px 16px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
+          {show("tests")&&<td style={{padding:"10px 16px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}
+            {r.clientPresence?.present&&<span title={"Client/NOBO présent"+(r.clientPresence.date?" le "+r.clientPresence.date:"")} style={{marginLeft:7,fontSize:12,background:T.red100,color:T.red600,borderRadius:5,padding:"2px 6px",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><PersonIcon size={10} color={T.red600}/>{r.clientPresence.date?" "+fmt(new Date(r.clientPresence.date)):""}</span>}
+          </td>}
+          {show("finprod")&&<td style={{padding:"10px 16px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
+          {show("depart")&&<td style={{padding:"10px 16px",fontWeight:600,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
+          {show("avancement")&&<td style={{padding:"10px 16px",whiteSpace:"nowrap",overflow:"hidden"}}>
+            {pval!=null?<div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:44,background:T.surfaceAlt,borderRadius:20,height:4,overflow:"hidden"}}><div style={{width:pval+"%",height:"100%",background:pval>=100?T.emerald500:pval>=50?T.teal500:T.amber500,borderRadius:20}}/></div><span style={{fontSize:13.5,fontWeight:600,color:T.ink500}}>{pval}%</span></div>
             :<span style={{color:T.ink300}}>—</span>}
           </td>}
-          {show("commentaires")&&<td style={{padding:"13px 16px",whiteSpace:"nowrap"}}>
+          {show("commentaires")&&<td style={{padding:"10px 16px",whiteSpace:"nowrap"}}>
             {(()=>{const n=(comments?.[r.pj]||[]).length;return n>0?
-              <span style={{display:"inline-flex",alignItems:"center",gap:6,background:T.teal100,color:T.teal600,borderRadius:20,padding:"3px 10px 3px 8px",fontSize:14,fontWeight:700}}><NavIcon name="comments" size={13}/>{n}</span>
-              :<span style={{color:T.ink300,fontSize:14}}>—</span>;})()}
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,color:T.ink500,fontSize:13.5,fontWeight:600}}><NavIcon name="comments" size={11}/>{n}</span>
+              :<span style={{color:T.ink100,fontSize:13.5}}>—</span>;})()}
           </td>}
         </tr>);
       })}</tbody>
     </table>
     </div>
-    {sel&&<ProjectModal pj={sel} data={data} df={df} onClose={()=>setSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}
-      pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}/>}
+  </div>
+  {/* flex:"2 1 300px" + maxWidth: colonne nettement plus étroite que la liste, et qui peut
+      rétrécir jusqu'à 300px avant de repasser à la ligne — demandé explicitement ("la réduire
+      en taille aussi pour que cela soit responsive"). */}
+  <div style={{flex:"2 1 300px",maxWidth:360,minWidth:260}}>
+    <ProjectModal inline pj={sel} data={data} df={df} onClose={()=>setSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}
+      pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}
+      addDelayComment={addDelayComment} deleteDelayComment={deleteDelayComment} authorName={authorName} savePjMetaOverride={savePjMetaOverride} canEditMeta={canEditMeta}/>
+  </div>
   </div>);
 }
 

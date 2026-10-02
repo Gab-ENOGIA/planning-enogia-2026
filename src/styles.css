@@ -28,12 +28,47 @@
 @keyframes enogiaSpin {
   to { transform: rotate(360deg); }
 }
+@keyframes enogiaPanelSlideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+/* Écran de connexion : effets d'ouverture/fermeture entre l'accueil ("Entrer") et la carte de
+   connexion Google (demandé explicitement : "effets d'ouverture et de fermeture sur les boutons
+   d'action"). */
+@keyframes enogiaModalPopOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(.95) translateY(8px); }
+}
+@keyframes enogiaFadeOutDown {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(6px) scale(.97); }
+}
+/* Popup de transition après connexion : logo qui pulse doucement pendant l'attente. */
+@keyframes enogiaLogoPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.045); opacity: .92; }
+}
 
 .enogia-fade-in { animation: enogiaFadeInUp .4s cubic-bezier(.2,.7,.3,1) both; }
 .enogia-float-in { animation: enogiaFloatIn .28s cubic-bezier(.2,.8,.3,1) both; }
 .enogia-modal-backdrop { animation: enogiaBackdropFade .18s ease both; }
 .enogia-modal-pop { animation: enogiaModalPop .25s cubic-bezier(.2,.85,.3,1.15) both; }
+.enogia-panel-backdrop { animation: enogiaBackdropFade .18s ease both; }
+.enogia-panel-slide { animation: enogiaPanelSlideIn .22s cubic-bezier(.2,.85,.3,1.1) both; }
 .enogia-pulse-urgent { animation: enogiaPulseRing 2.2s infinite; }
+.enogia-modal-pop-out { animation: enogiaModalPopOut .18s cubic-bezier(.4,0,.6,1) both; }
+.enogia-fade-out { animation: enogiaFadeOutDown .18s cubic-bezier(.4,0,.6,1) both; }
+/* Léger retour tactile au clic (demandé : effets sur les boutons d'action), sans dépendre d'un
+   gestionnaire JS par bouton. */
+.enogia-btn-tap { transition: transform .1s ease; }
+.enogia-btn-tap:active { transform: scale(.97); }
+
+/* Calendrier, mode Jour : le bouton "ajouter un commentaire" ne reste visible en permanence que
+   lorsqu'un commentaire existe déjà — sinon il n'apparaît qu'au survol de la cellule (demandé
+   explicitement : trop de "logos commentaires" affichés sur chaque jour). */
+.enogia-cal-commentbtn { opacity: 0; transition: opacity .12s ease; }
+.enogia-cal-commentbtn.has-comment { opacity: 1; }
+.enogia-cal-daycell:hover .enogia-cal-commentbtn { opacity: 1; }
 
 .enogia-skeleton {
   background: linear-gradient(90deg, #eef2f4 25%, #f6f8f9 37%, #eef2f4 63%);

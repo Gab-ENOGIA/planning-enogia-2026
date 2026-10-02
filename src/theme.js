@@ -3,57 +3,85 @@
 // ── DESIGN TOKENS ──────────────────────────────────────────────
 // Palette ancrée sur le dégradé du logo ENOGIA (navy → teal) + un accent "braise"
 // qui évoque le cycle thermique ORC (froid → chaud) pour les statuts urgents.
-// Deux jeux de tokens (clair / sombre) + tokens néomorphisme (ombres duales douces).
+// Rendu plat et net (bordures fines + ombres discrètes) plutôt que néomorphisme :
+// l'objectif est un outil industriel qui ressemble à un vrai produit, pas à un tableur.
 
 const SHARED = {
-  navy900:"#0c2436", navy800:"#15374d", navy700:"#20506e", navy600:"#2c6485",
-  thermalGradient:"linear-gradient(90deg,#0c2436 0%,#2394a8 60%,#4fb2c4 100%)",
-  thermalGradientHot:"linear-gradient(90deg,#0c2436 0%,#2394a8 45%,#c97848 100%)",
-  font:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-  fontDisplay:"'Space Grotesk','Inter',-apple-system,sans-serif",
+  navy900:"#0B1130", navy800:"#131B49", navy700:"#1E2C66", navy600:"#2C3F8C",
+  thermalGradient:"linear-gradient(90deg,#0B1130 0%,#1D2C4E 60%,#46587F 100%)",
+  thermalGradientHot:"linear-gradient(90deg,#0B1130 0%,#1D2C4E 45%,#C9703F 100%)",
+  // Fraunces en display : empattements fins, lettrage éditorial — le registre "premium" demandé,
+  // en rupture avec les sans-serif techniques utilisées jusqu'ici (Space Grotesk/Montserrat/Sora).
+  // Inter reste en corps de texte : c'est la police qui doit rester imperceptible et très lisible
+  // dans un tableau dense de chiffres et de dates.
+  // Roboto partout (demandé explicitement) — remplace Fraunces (titres) et Inter (corps), qui
+  // créaient deux registres différents dans l'appli ; un seul token "display" et un seul token
+  // "corps" pointent maintenant vers la même police, donc tout ce qui lisait T.fontDisplay/T.font
+  // bascule automatiquement, sans toucher chaque composant. T.fontMono reste à part (traitement
+  // volontaire "code" pour les identifiants PJ, déjà aligné entre la liste et la fiche projet).
+  fontDisplay:"'Roboto',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+  font:"'Roboto',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
   fontMono:"'JetBrains Mono','SF Mono',Consolas,monospace",
+  // Montserrat : réservée au titre de l'app et au gros chiffre du bandeau résumé (demande explicite),
+  // le reste du registre "display" (ManagerPanel, etc.) reste en Fraunces pour l'instant.
+  fontMontserrat:"'Montserrat',-apple-system,sans-serif",
 };
 
 const LIGHT = {
   ...SHARED,
   mode:"light",
-  teal600:"#0e7f92", teal500:"#2394a8", teal400:"#4fb2c4", teal100:"#e8f5f7",
-  surface:"#eef1f4", surfaceAlt:"#e7ebee", card:"#f2f4f6",
-  ink900:"#16232e", ink700:"#445561", ink500:"#6c7d89", ink300:"#aab7bf", ink100:"#e1e7ea",
-  line:"#dfe5e8",
-  amber600:"#ad5e12", amber500:"#c8811f", amber100:"#faf0e2",
-  emerald600:"#177a5f", emerald500:"#2f9c7b", emerald100:"#e6f5ef",
-  violet600:"#6b4aa8", violet500:"#8163bb", violet100:"#f1edf9",
-  red600:"#ad3535", red500:"#c74747", red100:"#fbeaea",
-  ember600:"#a85528", ember500:"#c97848", ember100:"#faede4",
-  shadowSm:"0 1px 2px rgba(15,40,60,.045), 0 1px 1px rgba(15,40,60,.03)",
-  shadowMd:"0 4px 14px rgba(15,40,60,.06), 0 1px 3px rgba(15,40,60,.045)",
-  shadowLg:"0 12px 32px rgba(15,40,60,.09), 0 2px 6px rgba(15,40,60,.045)",
-  neuOut:"7px 7px 15px rgba(163,178,191,.55), -7px -7px 15px rgba(255,255,255,.85)",
-  neuOutSm:"4px 4px 9px rgba(163,178,191,.5), -4px -4px 9px rgba(255,255,255,.85)",
-  neuIn:"inset 5px 5px 10px rgba(163,178,191,.55), inset -5px -5px 10px rgba(255,255,255,.85)",
-  neuInSm:"inset 3px 3px 6px rgba(163,178,191,.5), inset -3px -3px 6px rgba(255,255,255,.85)",
+  // RAL 5011 "Bleu acier" (#1D2C4E) — couleur demandée explicitement, en remplacement du bleu
+  // indigo précédent. (le nom des tokens reste `teal*` pour ne pas devoir toucher tous les composants)
+  teal600:"#121B30", teal500:"#1D2C4E", teal400:"#4B5D85", teal100:"#E8EAF0",
+  // Crème 3e itération (demandé explicitement : "encore plus légère, subtile") — à peine teinté,
+  // juste assez pour distinguer la page du blanc mat des cartes/bordures sans attirer l'œil.
+  surface:"#FDFBF6", surfaceAlt:"#F8F3E6", card:"#FFFFFF",
+  ink900:"#15181C", ink700:"#3D4349", ink500:"#6B7178", ink300:"#A7ACB1", ink100:"#E8E8E5",
+  // Plus clair qu'avant et utilisé avec parcimonie désormais (TableView n'a quasi plus de filets) :
+  // l'ancienne teinte lue comme une vraie bordure sombre sur le crème, "bizarre" d'après le retour.
+  line:"#F2ECDD",
+  // Gris neutre de la fiche projet ("blanche mate entièrement", sans le crème de la page) — déplacé
+  // ici depuis une constante figée du fichier ProjectModal.js, qui ne changeait jamais en mode
+  // sombre ("mettre le mode sombre en adéquation avec le mode clair") : un token T.* réagit comme
+  // toutes les autres couleurs quand on bascule de thème.
+  neuPanel:"#F5F5F3", neuPanelDim:"#ECECE9",
+  amber600:"#9A5B10", amber500:"#C1831E", amber100:"#F8EEDD",
+  emerald600:"#157A5E", emerald500:"#2B9C78", emerald100:"#E4F3EC",
+  violet600:"#6249A3", violet500:"#7C63B8", violet100:"#EEEAF8",
+  red600:"#AE3434", red500:"#CB4848", red100:"#FBEAEA",
+  ember600:"#9E5226", ember500:"#C97848", ember100:"#F9EAE0",
+  shadowSm:"0 1px 2px rgba(10,20,32,.06)",
+  shadowMd:"0 4px 16px rgba(10,20,32,.08), 0 1px 2px rgba(10,20,32,.04)",
+  shadowLg:"0 16px 40px rgba(10,20,32,.14), 0 2px 8px rgba(10,20,32,.06)",
+  // Cartes plates : un trait fin + une ombre quasi invisible, au lieu du double-relief néomorphique.
+  neuOut:"0 0 0 1px rgba(16,24,34,.07), 0 1px 2px rgba(16,24,34,.04)",
+  neuOutSm:"0 0 0 1px rgba(16,24,34,.07)",
+  neuIn:"inset 0 0 0 1px rgba(16,24,34,.09)",
+  neuInSm:"inset 0 0 0 1px rgba(16,24,34,.08)",
 };
 
 const DARK = {
   ...SHARED,
   mode:"dark",
-  teal600:"#5fc4d8", teal500:"#3aa8bd", teal400:"#67c1d3", teal100:"#173842",
-  surface:"#1a222b", surfaceAlt:"#212b35", card:"#1e2830",
-  ink900:"#eef2f4", ink700:"#c3ccd2", ink500:"#8fa0a9", ink300:"#5b6b74", ink100:"#2a343d",
-  line:"#2c3742",
-  amber600:"#e3a44e", amber500:"#c8811f", amber100:"#3a2c17",
-  emerald600:"#5cd1a8", emerald500:"#2f9c7b", emerald100:"#153228",
-  violet600:"#b09be0", violet500:"#8163bb", violet100:"#2a2440",
-  red600:"#e58080", red500:"#c74747", red100:"#3a1e1e",
-  ember600:"#eba274", ember500:"#c97848", ember100:"#3a2517",
-  shadowSm:"0 1px 2px rgba(0,0,0,.35), 0 1px 1px rgba(0,0,0,.25)",
-  shadowMd:"0 4px 14px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.3)",
-  shadowLg:"0 12px 32px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.35)",
-  neuOut:"7px 7px 15px rgba(0,0,0,.55), -7px -7px 15px rgba(255,255,255,.035)",
-  neuOutSm:"4px 4px 9px rgba(0,0,0,.5), -4px -4px 9px rgba(255,255,255,.03)",
-  neuIn:"inset 5px 5px 10px rgba(0,0,0,.55), inset -5px -5px 10px rgba(255,255,255,.03)",
-  neuInSm:"inset 3px 3px 6px rgba(0,0,0,.5), inset -3px -3px 6px rgba(255,255,255,.03)",
+  teal600:"#B7C2DE", teal500:"#7C8EB8", teal400:"#95A4C6", teal100:"#1B2235",
+  surface:"#12171D", surfaceAlt:"#171D24", card:"#1A2026",
+  ink900:"#F0F1F0", ink700:"#C7CBCE", ink500:"#8E959B", ink300:"#565D63", ink100:"#242B32",
+  line:"#262D34",
+  // Équivalent sombre du gris neutre de la fiche projet, légèrement plus clair que card/surface
+  // pour garder le même effet de "palier" qu'en mode clair sans jamais retomber sur le crème.
+  neuPanel:"#20262D", neuPanelDim:"#262D34",
+  amber600:"#E2A95A", amber500:"#C1831E", amber100:"#332812",
+  emerald600:"#5FD4A8", emerald500:"#2B9C78", emerald100:"#132B22",
+  violet600:"#B4A2E6", violet500:"#7C63B8", violet100:"#241F38",
+  red600:"#E58A8A", red500:"#CB4848", red100:"#331D1D",
+  ember600:"#EBA276", ember500:"#C97848", ember100:"#332016",
+  shadowSm:"0 1px 2px rgba(0,0,0,.4)",
+  shadowMd:"0 4px 16px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3)",
+  shadowLg:"0 16px 40px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.35)",
+  neuOut:"0 0 0 1px rgba(255,255,255,.07), 0 1px 2px rgba(0,0,0,.3)",
+  neuOutSm:"0 0 0 1px rgba(255,255,255,.07)",
+  neuIn:"inset 0 0 0 1px rgba(255,255,255,.09)",
+  neuInSm:"inset 0 0 0 1px rgba(255,255,255,.08)",
 };
 
 // T est un objet MUTABLE (même référence tout le temps) : setThemeMode() modifie ses champs en place.

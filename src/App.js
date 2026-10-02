@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { db } from "./firebase";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { db, auth, ALLOWED_EMAIL_DOMAIN } from "./firebase";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import "./styles.css";
 
 import { T, setThemeMode } from "./theme";
-import { getPjMeta, ALL_GAMMES, ALL_ETATS, MONTHS, today, setSyncedPjMeta, GAMME_OVERRIDE } from "./pjMeta";
+import { getPjMeta, ALL_GAMMES, ALL_ETATS, MONTHS, today, setSyncedPjMeta, setPjMetaOverrides, GAMME_OVERRIDE, EXCLUDED_CHEFS } from "./pjMeta";
 import { weekStartOf, fetchSuiviORC } from "./parsers";
 import { ImportButton, PinGate, PIN, NavIcon } from "./components/SharedUI";
 import { GanttView } from "./components/GanttView";
@@ -13,14 +14,18 @@ import { CommentsView } from "./components/CommentsView";
 import { TableView } from "./components/TableView";
 import { CalendarView } from "./components/CalendarView";
 import { ManagerPanel } from "./components/ManagerPanel";
+import { LoginScreen, LoginTransition } from "./components/LoginScreen";
+import { DashboardSummary } from "./components/DashboardSummary";
 
 const DOC_REF=()=>doc(db,"planning","current");
 const INITIAL_DOC_REF=()=>doc(db,"planning","initial");
 const OVERRIDES_DOC_REF=()=>doc(db,"planning","overrides");
 const COMMENTS_DOC_REF=()=>doc(db,"planning","comments");
 const PJ_META_SYNC_DOC_REF=()=>doc(db,"planning","pjMetaSync");
+const PJ_META_OVERRIDES_DOC_REF=()=>doc(db,"planning","pjMetaOverrides");
 const DELAYS_DOC_REF=()=>doc(db,"planning","delays");
 const DELAY_TYPES_DOC_REF=()=>doc(db,"planning","delayTypes");
+const MANAGER_EMAILS_DOC_REF=()=>doc(db,"planning","managerEmails");
 
 // Types de retard génériques par défaut — éditables depuis le panel Manager (onglet Retards)
 const DEFAULT_DELAY_TYPES=[
@@ -28,10 +33,57 @@ const DEFAULT_DELAY_TYPES=[
   "Aléas planning client","Retard études","Manque de main d'œuvre","Autre",
 ];
 
-const APP_BUILD_VERSION="2026-08-19-v29-manager-privacy-fiche-retards";
+const APP_BUILD_VERSION="2026-10-02-v68-commentaires-style-chat-partout";
 console.log("🔵 planning-enogia-2026 build:",APP_BUILD_VERSION);
 
 export default function App(){
+  // Utilisateur connecté via Google, restreint aux comptes @enogia.com (null tant que non connecté).
+  const [currentUser,setCurrentUser]=useState(null);
+  const [authChecked,setAuthChecked]=useState(false); // évite un flash de l'écran de connexion pendant la vérification initiale
+
+  useEffect(()=>{
+    const unsub=onAuthStateChanged(auth,user=>{
+      if(user&&user.email&&user.email.toLowerCase().endsWith("@"+ALLOWED_EMAIL_DOMAIN)){
+        setCurrentUser(user);
+      }else{
+        if(user)signOut(auth); // compte connecté mais hors domaine autorisé : on déconnecte
+        setCurrentUser(null);
+      }
+      setAuthChecked(true);
+    });
+    return ()=>unsub();
+  },[]);
+
+  const loggedIn=!!currentUser;
+  // Nom à utiliser automatiquement pour les commentaires/retards : celui du compte Google connecté.
+  const authorName=currentUser?.displayName||currentUser?.email||"";
+
+  // Popup de transition légère après la connexion, avant d'arriver sur le planning (demandé
+  // explicitement) — déclenchée seulement sur un vrai clic "se connecter" depuis l'écran de
+  // connexion, pas au chargement de la page quand une session était déjà active (sinon la popup
+  // réapparaîtrait à chaque rafraîchissement). initialAuthResolvedRef distingue la toute première
+  // résolution de onAuthStateChanged (restauration de session) d'un passage false→true ultérieur
+  // (vraie connexion en cours de visite).
+  const [justLoggedIn,setJustLoggedIn]=useState(false);
+  const wasLoggedInRef=useRef(false);
+  const initialAuthResolvedRef=useRef(false);
+  useEffect(()=>{
+    const wasLoggedIn=wasLoggedInRef.current;
+    const isInitialResolution=!initialAuthResolvedRef.current;
+    wasLoggedInRef.current=loggedIn;
+    if(authChecked)initialAuthResolvedRef.current=true;
+    if(loggedIn&&!wasLoggedIn&&!isInitialResolution){
+      setJustLoggedIn(true);
+      const t=setTimeout(()=>setJustLoggedIn(false),2200);
+      return ()=>clearTimeout(t);
+    }
+  },[loggedIn,authChecked]);
+  // "L'option de modifier [la fiche projet] doit être disponible uniquement par moi" — restreint à
+  // l'email de connexion de Gabriel, pas à pinOk (que d'autres membres de la BU ORC peuvent aussi
+  // avoir en entrant le code Manager). À AJUSTER si ce n'est pas exactement ton adresse @enogia.com.
+  const OWNER_EMAILS=["gabriel.vincent@enogia.com"];
+  const canEditMeta=!!(currentUser?.email&&OWNER_EMAILS.includes(currentUser.email.toLowerCase()));
+
   const [darkMode,setDarkMode]=useState(()=>{
     try{return localStorage.getItem("enogia_darkMode")==="1";}catch(e){return false;}
   });
@@ -64,7 +116,7 @@ export default function App(){
   });
   const [calZoom,setCalZoom]=useState(()=>{
     try{const s=localStorage.getItem("enogia_calZoom");if(s!=null)return parseInt(s,10);}catch(e){}
-    return 1;
+    return 2; // dézoomé par défaut pour une vue d'ensemble plus large à l'ouverture
   });
   useEffect(()=>{
     try{
@@ -96,8 +148,15 @@ export default function App(){
   const [comments,setComments]=useState({});
   const [delays,setDelays]=useState({});
   const [delayTypes,setDelayTypes]=useState(DEFAULT_DELAY_TYPES);
+  const [managerEmails,setManagerEmails]=useState([]);
   const [tableJumpPj,setTableJumpPj]=useState(null);
   const jumpToPj=useCallback(pj=>{setView("table");setTableJumpPj(pj);},[]);
+
+  // Déverrouille automatiquement l'espace Manager pour les emails autorisés — le code
+  // PIN reste disponible en repli (utile tant que la liste n'est pas encore renseignée).
+  useEffect(()=>{
+    if(currentUser?.email&&managerEmails.includes(currentUser.email))setPinOk(true);
+  },[currentUser,managerEmails]);
 
   // Lecture temps réel depuis Firestore
   useEffect(()=>{
@@ -194,6 +253,32 @@ export default function App(){
   },[]);
   const [syncingORC,setSyncingORC]=useState(false);
   const [syncORCError,setSyncORCError]=useState("");
+
+  // Lecture temps réel des corrections manuelles de fiche projet (nom/pays/chef), saisies dans l'app.
+  // Prioritaires sur la synchro Suivi ORC — c'est la dernière main humaine sur la donnée.
+  const [pjOverridesState,setPjOverridesState]=useState({});
+  useEffect(()=>{
+    const unsub = onSnapshot(PJ_META_OVERRIDES_DOC_REF(), (snap)=>{
+      const v=snap.exists()?(snap.data().meta||{}):{};
+      setPjMetaOverrides(v);
+      setPjOverridesState(v);
+    }, (err)=>{
+      console.error("Erreur Firestore (pjMetaOverrides):", err);
+    });
+    return ()=>unsub();
+  },[]);
+  const savePjMetaOverride=useCallback(async (pj,fields)=>{
+    const next={...pjOverridesState,[pj]:{...(pjOverridesState[pj]||{}),...fields}};
+    try{
+      await setDoc(PJ_META_OVERRIDES_DOC_REF(), { meta:next }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement des infos projet : " + e.message);
+      return false;
+    }
+  },[pjOverridesState]);
+
   const syncFromSuiviORC=useCallback(async ()=>{
     setSyncingORC(true);setSyncORCError("");
     try{
@@ -279,6 +364,29 @@ export default function App(){
     return ()=>unsub();
   },[]);
 
+  // Lecture temps réel de la liste des emails autorisés à l'espace Manager
+  useEffect(()=>{
+    const unsub = onSnapshot(MANAGER_EMAILS_DOC_REF(), (snap)=>{
+      if(snap.exists()&&Array.isArray(snap.data().emails)){
+        setManagerEmails(snap.data().emails);
+      }
+    }, (err)=>{
+      console.error("Erreur Firestore (managerEmails):", err);
+    });
+    return ()=>unsub();
+  },[]);
+
+  const setManagerEmailsAndSave=useCallback(async next=>{
+    try{
+      await setDoc(MANAGER_EMAILS_DOC_REF(), { emails:next }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement de la liste des accès Manager : " + e.message);
+      return false;
+    }
+  },[]);
+
   const addDelayAllocation=useCallback(async (pj,type,days,note,author)=>{
     if(!type||!days||isNaN(days))return false;
     const current=delays[pj]||[];
@@ -294,10 +402,62 @@ export default function App(){
     }
   },[delays]);
 
+  // Alloue la même cause de retard (même type, mêmes jours) à plusieurs PJ à la fois — ex. un décalage qui affecte toute une ligne de projets.
+  // Les entrées partagent un groupId/groupPjs, exactement comme les commentaires groupés, pour un traçage identique.
+  const addDelayAllocationMulti=useCallback(async (pjList,type,days,note,author)=>{
+    if(!type||!days||isNaN(days)||!pjList||pjList.length===0)return false;
+    const groupId=pjList.length>1?(Date.now()+"-"+Math.random().toString(36).slice(2,7)):null;
+    const nextAll={...delays};
+    pjList.forEach(pj=>{
+      const current=nextAll[pj]||delays[pj]||[];
+      nextAll[pj]=[...current,{id:Date.now()+"-"+Math.random().toString(36).slice(2,7)+"-"+pj,type,days:Math.round(Number(days)),note:(note||"").trim(),author:(author||"").trim(),date:new Date().toISOString(),groupId,groupPjs:pjList.length>1?pjList:undefined}];
+    });
+    try{
+      await setDoc(DELAYS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement du retard : " + e.message);
+      return false;
+    }
+  },[delays]);
+
   const deleteDelayAllocation=useCallback(async (pj,id,pin)=>{
     if(pin!==PIN){alert("Code incorrect.");return false;}
     const current=delays[pj]||[];
     const next=current.filter(d=>d.id!==id);
+    const nextAll={...delays,[pj]:next};
+    try{
+      await setDoc(DELAYS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de la suppression : " + e.message);
+      return false;
+    }
+  },[delays]);
+
+  // Vrai fil de discussion sur une cause de retard précise (au-delà de la note initiale) :
+  // suivi des relances, réponses fournisseur, etc. au fil du temps.
+  const addDelayComment=useCallback(async (pj,delayId,author,text)=>{
+    if(!author.trim()||!text.trim())return false;
+    const current=delays[pj]||[];
+    const next=current.map(d=>d.id===delayId?{...d,comments:[...(d.comments||[]),{author:author.trim(),text:text.trim(),date:new Date().toISOString()}]}:d);
+    const nextAll={...delays,[pj]:next};
+    try{
+      await setDoc(DELAYS_DOC_REF(), { byPj:nextAll }, { merge:true });
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'enregistrement du commentaire : " + e.message);
+      return false;
+    }
+  },[delays]);
+
+  const deleteDelayComment=useCallback(async (pj,delayId,idx,pin)=>{
+    if(pin!==PIN){alert("Code incorrect.");return false;}
+    const current=delays[pj]||[];
+    const next=current.map(d=>d.id===delayId?{...d,comments:(d.comments||[]).filter((_,i)=>i!==idx)}:d);
     const nextAll={...delays,[pj]:next};
     try{
       await setDoc(DELAYS_DOC_REF(), { byPj:nextAll }, { merge:true });
@@ -385,7 +545,10 @@ export default function App(){
   const allPJs=useMemo(()=>[...new Set(data.map(r=>r.pj))].sort(),[data]);
   const allProjets=useMemo(()=>[...new Set(data.map(r=>getPjMeta(r.pj,r).nomProjet))].sort(),[data]);
   const allPays=useMemo(()=>[...new Set(data.map(r=>getPjMeta(r.pj,r).pays))].sort(),[data]);
-  const allChefs=useMemo(()=>[...new Set(data.map(r=>getPjMeta(r.pj,r).chefProjet))].sort(),[data]);
+  // Mêmes noms exclus que dans le sélecteur d'édition (demandé explicitement : "enlever CMA et
+  // Clément Bablon du choix du chef de projet") — n'affecte que la liste proposée au filtre, pas
+  // les projets déjà assignés à ces noms.
+  const allChefs=useMemo(()=>[...new Set(data.map(r=>getPjMeta(r.pj,r).chefProjet))].filter(c=>!EXCLUDED_CHEFS.has(c)).sort(),[data]);
 
   // L'état affiché vient exclusivement du choix manuel du Manager (etatChoice), sinon "À définir"
   const initialByPj=useMemo(()=>{const m={};initialData.forEach(r=>{m[r.pj]=r;});return m;},[initialData]);
@@ -395,8 +558,8 @@ export default function App(){
     if(ini&&ini.depart&&r.depart){
       drift=Math.round((new Date(r.depart)-new Date(ini.depart))/86400000);
     }
-    return{...r,etat:etatChoice[r.pj]||r.etat||"A_DEFINIR",clientPresence:clientPresence[r.pj]||null,drift,gamme:GAMME_OVERRIDE[r.pj]||r.gamme};
-  }),[data,etatChoice,clientPresence,initialByPj]);
+    return{...r,etat:etatChoice[r.pj]||r.etat||"A_DEFINIR",clientPresence:clientPresence[r.pj]||null,drift,gamme:(pjOverridesState[r.pj]&&pjOverridesState[r.pj].gamme)||GAMME_OVERRIDE[r.pj]||r.gamme};
+  }),[data,etatChoice,clientPresence,initialByPj,pjOverridesState]);
 
   const filtered=useMemo(()=>dataWithOverrides.filter(r=>{
     if(!selEtats.has(r.etat))return false;
@@ -415,77 +578,77 @@ export default function App(){
 
   const VIEWS=[{id:"table",icon:"list",l:"Liste"},{id:"gantt",icon:"gantt",l:"Gantt"},{id:"calendar",icon:"calendar",l:"Calendrier"},{id:"comments",icon:"comments",l:"Commentaires"}];
 
-  const heroStats=useMemo(()=>{
-    const total=dataWithOverrides.length;
-    const enProd=dataWithOverrides.filter(r=>["PROD","En fabrication"].includes(r.etat)).length;
-    const shipped=dataWithOverrides.filter(r=>r.etat==="SHIPPED").length;
-    const late=dataWithOverrides.filter(r=>r.drift!=null&&r.drift>0).length;
-    return{total,enProd,shipped,late};
-  },[dataWithOverrides]);
+  if(!authChecked)return null; // évite un flash de l'écran de connexion pendant la vérification initiale
+  if(!loggedIn) return <LoginScreen/>;
+  // Fond flouté réel (demandé explicitement : "un transparent flou ... la vision en flou derrière
+  // de la première page") plutôt qu'un fond plat à formes décoratives : l'écran de connexion reste
+  // monté en dessous, et LoginTransition n'est plus qu'un calque "verre dépoli" (backdrop-filter)
+  // superposé par-dessus, qui laisse donc transparaître — flouté — ce qu'il y a vraiment derrière.
+  if(justLoggedIn) return (<><LoginScreen/><LoginTransition name={authorName}/></>);
 
-  return(<div className="enogia-fade-in" style={{fontFamily:T.font,fontSize:17,background:T.surface,minHeight:"100vh",padding:20,color:T.ink900}}>
+  return(<div className="enogia-fade-in" style={{fontFamily:T.font,fontSize:17,background:T.surface,minHeight:"100vh",color:T.ink900,display:"flex"}}>
     <style>{"*{box-sizing:border-box;}"}</style>
-    <div style={{position:"relative",backgroundColor:T.navy900,backgroundImage:"radial-gradient(ellipse 500px 300px at 12% 10%, rgba(79,178,196,.32), transparent 60%), radial-gradient(ellipse 650px 450px at 90% 100%, rgba(35,148,168,.38), transparent 65%), linear-gradient(165deg,"+T.navy900+" 0%,"+T.navy800+" 55%,"+T.navy700+" 100%)",borderRadius:18,marginBottom:24,color:"#fff",overflow:"hidden",boxShadow:"0 18px 40px -12px rgba(12,36,54,.55)"}}>
-      {(loading||data.length===0)&&<div style={{position:"absolute",left:0,right:0,bottom:0,height:2,background:T.thermalGradient}}/>}
 
-      <div style={{padding:(!loading&&data.length>0)?"24px 30px 16px":"24px 30px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-        <img src={process.env.PUBLIC_URL+"/enogia-logo-white.svg"} alt="ENOGIA" width="150" height="54" style={{height:44,width:"auto",objectFit:"contain",flexShrink:0,imageRendering:"auto"}}/>
-        <div style={{width:1,height:26,background:"rgba(255,255,255,.2)"}}/>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:26,letterSpacing:".02em",textTransform:"uppercase",color:"#fff"}}>Planning Ordonnancement</div>
+    {/* ── Rail de navigation : icônes de vue + accès Manager + mode sombre ── */}
+    <nav style={{width:64,flexShrink:0,background:T.card,borderRight:"1px solid "+T.line,display:"flex",flexDirection:"column",alignItems:"center",padding:"16px 0",gap:4,position:"sticky",top:0,height:"100vh"}}>
+      {/* Plus de logo ici (demandé explicitement : trop petit pour être lisible) — il ne reste
+          qu'au seul endroit où il est bien lisible, agrandi, dans l'en-tête. */}
+      {VIEWS.map(v=><button key={v.id} onClick={()=>setView(v.id)} title={v.l} style={{width:40,height:40,borderRadius:10,border:"none",borderLeft:"3px solid "+(view===v.id?T.teal500:"transparent"),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:view===v.id?T.teal100:"transparent",color:view===v.id?T.teal600:T.ink300,transition:"background .15s ease, color .15s ease, border-color .15s ease"}}
+        onMouseEnter={e=>{if(view!==v.id)e.currentTarget.style.background=T.surface;}}
+        onMouseLeave={e=>{if(view!==v.id)e.currentTarget.style.background="transparent";}}><NavIcon name={v.icon} size={19}/></button>)}
+      <div style={{flex:1}}/>
+      <button onClick={()=>setView("manager")} title="Manager" style={{width:40,height:40,borderRadius:10,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:view==="manager"?T.teal100:T.surface,color:view==="manager"?T.teal600:T.ink300,transition:"background .15s ease, color .15s ease"}}><NavIcon name="lock" size={18}/></button>
+      <button onClick={()=>setDarkMode(d=>!d)} title={darkMode?"Passer en mode clair":"Passer en mode sombre"} style={{width:40,height:36,borderRadius:10,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",color:T.ink300,marginTop:4}}
+        onMouseEnter={e=>{e.currentTarget.style.background=T.surface;}}
+        onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}><NavIcon name={darkMode?"moon":"sunSm"} size={16}/></button>
+    </nav>
+
+    {/* ── Colonne principale ── */}
+    <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
+
+      {/* Barre de marque — fine, claire, sans dégradé : l'identité tient au logo + à la typo, pas à un bloc de couleur */}
+      <div style={{flexShrink:0,minHeight:60,display:"flex",alignItems:"center",gap:16,padding:"10px 28px",background:T.card,borderBottom:"1px solid "+T.line,flexWrap:"wrap"}}>
+        {/* Le fichier logo d'origine a énormément de marge transparente autour du dessin réel
+            (~24% de sa hauteur seulement est visible) : l'agrandir ne suffisait donc pas, il
+            paraissait toujours minuscule. enogia-logo-color-crop.svg est recadré au plus près
+            du dessin (mark + "enogia"), donc la même hauteur rend un logo visuellement ~3x
+            plus grand qu'avant, comme demandé — sans avoir à démesurer toute la barre d'en-tête. */}
+        <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" width="105" height="42" style={{height:42,width:"auto",objectFit:"contain",flexShrink:0}}/>
+        <div style={{width:1,height:26,background:T.teal400,opacity:.35,flexShrink:0}}/>
+        {/* Fraunces (empattements fins) : même police que tous les autres titres/intitulés de
+            section de l'appli (ManagerPanel, fiche projet, etc.) — déjà "la police utilisée partout"
+            pour un titre, donc inchangée ici. Couleur passée en bleu acier foncé (T.teal600, plus
+            sombre que le gris-noir T.ink900 d'avant, demandé explicitement : "le titre doit être plus
+            sombre") et tracking aligné sur celui des intitulés de section (.03em) pour que ce titre se
+            lise comme le même registre typographique que le reste, pas comme une police à part. */}
+        <div style={{display:"flex",flexDirection:"column",gap:1}}>
+          {/* Taille augmentée (demandé explicitement : "police plus grande") — police Roboto en
+              attendant la confirmation (Roboto ou Abel, les deux proposées) ; bleu acier foncé déjà en
+              place. "Production" retiré du sous-titre, qui ne garde que "BU ORC" (demandé
+              explicitement). */}
+          <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:26,color:T.teal600,letterSpacing:".01em",textTransform:"uppercase",whiteSpace:"nowrap"}}>Planning Ordonnancement</div>
+          <span style={{fontFamily:T.fontDisplay,fontSize:12,fontWeight:600,letterSpacing:".06em",textTransform:"uppercase",color:T.teal500,whiteSpace:"nowrap"}}>BU ORC</span>
+        </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-          <span style={{color:"rgba(255,255,255,.6)",fontSize:13,fontWeight:500,fontFamily:T.fontMono}}>{loading?"Chargement...":data.length+" unités"+(lastImport?" · Import "+lastImport:"")}</span>
-          {docIndice&&<span style={{background:"rgba(255,255,255,.12)",color:"#fff",borderRadius:6,padding:"2px 10px",fontSize:12.5,fontWeight:600,fontFamily:T.fontMono}}>Indice {docIndice}</span>}
-          <button onClick={()=>setDarkMode(d=>!d)} title={darkMode?"Passer en mode clair":"Passer en mode sombre"} style={{position:"relative",width:50,height:27,borderRadius:14,border:"none",cursor:"pointer",background:"rgba(255,255,255,.1)",boxShadow:"inset 2px 2px 5px rgba(0,0,0,.35), inset -1px -1px 3px rgba(255,255,255,.06)",transition:"background .2s ease",flexShrink:0}}>
-            <span style={{position:"absolute",top:2.5,left:darkMode?25:2.5,width:22,height:22,borderRadius:"50%",background:"linear-gradient(145deg,#fdfdfd,#dfe4e7)",boxShadow:"2px 2px 5px rgba(0,0,0,.4), -1px -1px 2px rgba(255,255,255,.6)",display:"flex",alignItems:"center",justifyContent:"center",color:darkMode?T.navy700:T.amber500,transition:"left .22s cubic-bezier(.4,0,.2,1)"}}>
-              <NavIcon name={darkMode?"moon":"sunSm"} size={12.5}/>
-            </span>
-          </button>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:1}}>
+            <span style={{color:T.ink700,fontSize:13,fontWeight:600,fontFamily:T.font}}>{loading?"Chargement...":data.length+" unités"}</span>
+            {!loading&&lastImport&&<span style={{color:T.ink300,fontSize:11,fontFamily:T.font}}>Import {lastImport}</span>}
+          </div>
+          {/* Police mono remplacée par l'Inter standard (demandé explicitement : "la police de l'indice M
+              n'est pas conforme") — elle jurait seule au milieu d'un en-tête en Fraunces/Inter. */}
+          {docIndice&&<span style={{background:T.surfaceAlt,color:T.ink700,borderRadius:7,padding:"5px 11px",fontSize:12,fontWeight:700,fontFamily:T.font,letterSpacing:".01em",border:"1px solid "+T.line}}>Indice {docIndice}</span>}
           <ImportButton
             onImport={handleImport}
             busy={importing}
             hasExisting={data.length>0}
             confirmMessage={"Un planning révisé a déjà été importé"+(lastImport?(" le "+lastImport):"")+" ("+data.length+" unités).\n\nCet import va remplacer les données pour tous les visiteurs du site.\n\nÊtes-vous sûr de vouloir continuer ?"}
           />
+          {currentUser&&<div style={{width:1,height:22,background:T.line}}/>}
+          {currentUser&&<UserChip user={currentUser} onSignOut={()=>signOut(auth)}/>}
         </div>
       </div>
 
-      {!loading&&data.length>0&&<div style={{padding:"0 30px 18px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-        <div style={{display:"flex",gap:2,background:"rgba(255,255,255,.08)",border:"none",borderRadius:12,padding:4,backdropFilter:"blur(6px)",boxShadow:"inset 0 1px 4px rgba(0,0,0,.22)"}}>
-          {VIEWS.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{padding:"8px 17px",borderRadius:8,border:"none",cursor:"pointer",fontSize:15.5,fontWeight:700,display:"flex",alignItems:"center",gap:7,background:view===v.id?"#fff":"transparent",color:view===v.id?T.navy800:"rgba(255,255,255,.8)",transition:"background .15s ease, color .15s ease"}}
-            onMouseEnter={e=>{if(view!==v.id)e.currentTarget.style.background="rgba(255,255,255,.1)";}}
-            onMouseLeave={e=>{if(view!==v.id)e.currentTarget.style.background="transparent";}}><NavIcon name={v.icon}/>{v.l}</button>)}
-        </div>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:12.5,color:"rgba(255,255,255,.55)",fontWeight:600,textTransform:"uppercase",letterSpacing:".04em"}}>Dates</span>
-            <div style={{display:"flex",gap:2,background:"rgba(255,255,255,.08)",border:"none",borderRadius:10,padding:3,boxShadow:"inset 0 1px 3px rgba(0,0,0,.2)"}}>
-              {[["date","Jours"],["semaine","Semaines"],["mois","Mois"]].map(([k,l])=><button key={k} onClick={()=>setDf(k)} style={{padding:"5px 12px",borderRadius:6,border:"none",background:df===k?"#fff":"transparent",color:df===k?T.navy800:"rgba(255,255,255,.8)",fontSize:13.5,fontWeight:700,cursor:"pointer",transition:"background .15s ease, color .15s ease"}}
-                onMouseEnter={e=>{if(df!==k)e.currentTarget.style.background="rgba(255,255,255,.1)";}}
-                onMouseLeave={e=>{if(df!==k)e.currentTarget.style.background="transparent";}}>{l}</button>)}
-            </div>
-          </div>
-          <button onClick={()=>setView("manager")} style={{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontSize:15,fontWeight:700,display:"flex",alignItems:"center",gap:7,background:view==="manager"?"#fff":"rgba(255,255,255,.08)",color:view==="manager"?T.navy800:"rgba(255,255,255,.85)",boxShadow:view==="manager"?"0 2px 8px rgba(0,0,0,.25)":"inset 0 1px 3px rgba(0,0,0,.2)",transition:"background .18s ease, box-shadow .18s ease"}}><NavIcon name="lock" size={15}/>Manager</button>
-        </div>
-      </div>}
-    </div>
-
-    {!loading&&data.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:24}}>
-      {[
-        {label:"Unités au planning",value:heroStats.total,accent:T.teal600,icon:"layers"},
-        {label:"En production",value:heroStats.enProd,accent:T.violet600,icon:"gauge"},
-        {label:"Expédiées",value:heroStats.shipped,accent:T.emerald600,icon:"check"},
-      ].map((s,i)=>(
-        <div key={i} style={{background:T.surface,borderRadius:14,padding:"16px 18px",border:"none",boxShadow:T.neuOutSm,position:"relative",display:"flex",alignItems:"center",gap:13,transition:"box-shadow .18s ease, transform .18s ease"}}
-          onMouseEnter={e=>{e.currentTarget.style.boxShadow=T.neuOut;e.currentTarget.style.transform="translateY(-2px)";}}
-          onMouseLeave={e=>{e.currentTarget.style.boxShadow=T.neuOutSm;e.currentTarget.style.transform="none";}}>
-          <div style={{width:34,height:34,borderRadius:9,background:s.accent+"14",color:s.accent,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><NavIcon name={s.icon} size={17}/></div>
-          <div>
-            <div style={{fontFamily:T.fontMono,fontWeight:600,fontSize:23,color:T.ink900,lineHeight:1}}>{s.value}</div>
-            <div style={{fontSize:12.5,color:T.ink500,fontWeight:600,marginTop:3}}>{s.label}</div>
-          </div>
-        </div>
-      ))}
-    </div>}
+      <div style={{padding:"22px 28px",flex:1}}>
 
 
     {loading?<div style={{textAlign:"center",padding:80,color:T.ink500}}>
@@ -495,7 +658,7 @@ export default function App(){
     data.length===0?(
       <div className="enogia-float-in" style={{background:T.surface,borderRadius:16,padding:56,textAlign:"center",border:"none",boxShadow:T.neuOut}}>
         <div style={{width:56,height:56,margin:"0 auto 18px",borderRadius:14,background:T.surface,boxShadow:T.neuInSm,color:T.teal600,display:"flex",alignItems:"center",justifyContent:"center"}}><NavIcon name="inbox" size={26}/></div>
-        <div style={{fontFamily:T.fontDisplay,fontWeight:600,color:T.ink900,marginBottom:8,fontSize:20}}>Aucune donnée pour l'instant</div>
+        <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:600,color:T.ink900,marginBottom:8,fontSize:20}}>Aucune donnée pour l'instant</div>
         <div style={{color:T.ink500,fontSize:16,marginBottom:20,maxWidth:420,marginLeft:"auto",marginRight:"auto"}}>Importe un planning MS Project pour faire apparaître les projets ici.</div>
       </div>
     ):(
@@ -503,7 +666,7 @@ export default function App(){
         {view==="manager"?(pinOk?
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-              <span style={{fontFamily:T.fontDisplay,fontWeight:700,color:T.ink900,fontSize:21}}>🔓 Espace Manager</span>
+              <span style={{fontFamily:T.fontDisplay,fontWeight:600,color:T.ink900,fontSize:22,display:"flex",alignItems:"center",gap:9}}><NavIcon name="lock" size={20}/>Espace Manager</span>
               <button onClick={()=>setPinOk(false)} style={{padding:"7px 15px",borderRadius:10,border:"none",background:T.surface,boxShadow:T.neuOutSm,fontSize:15,cursor:"pointer",color:T.ink700,fontWeight:600}}>Verrouiller</button>
             </div>
             <ManagerPanel data={dataWithOverrides} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}
@@ -512,12 +675,17 @@ export default function App(){
               closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriodsAndSave}
               productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}
               pjMetaSyncInfo={pjMetaSyncInfo} syncingORC={syncingORC} syncORCError={syncORCError} syncFromSuiviORC={syncFromSuiviORC}
-              comments={comments} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypesAndSave}/>
+              comments={comments} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypesAndSave} addDelayAllocationMulti={addDelayAllocationMulti}
+              managerEmails={managerEmails} setManagerEmails={setManagerEmailsAndSave} currentUserEmail={currentUser?.email} authorName={authorName}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(
           <div key={view} className="enogia-float-in">
-            {view==="table"&&<TableView data={filtered} progress={progress} df={df}
+            {/* allData (non filtré) pour le compteur "expédiées depuis le 1er janvier" : il ne doit
+                jamais varier selon les filtres actifs sur la liste, demandé explicitement — seules
+                les 4 répartitions en camembert, elles, continuent de suivre les filtres. */}
+            {view==="table"&&<DashboardSummary data={filtered} allData={dataWithOverrides}/>}
+            {view==="table"&&<TableView data={filtered} progress={progress} df={df} setDf={setDf}
               selEtats={selEtats} setSelEtats={setSelEtats}
               selGammes={selGammes} setSelGammes={setSelGammes}
               allPJs={allPJs} selPJs={selPJs} setSelPJs={setSelPJs}
@@ -530,21 +698,63 @@ export default function App(){
               selMoisDepart={selMoisDepart} setSelMoisDepart={setSelMoisDepart}
               comments={comments} addComment={addComment} deleteComment={deleteComment}
               pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}
-              externalSel={tableJumpPj} setExternalSel={setTableJumpPj}/>}
-            {view==="gantt"&&<GanttView data={filtered} progress={progress} df={df}/>}
+              addDelayComment={addDelayComment} deleteDelayComment={deleteDelayComment}
+              externalSel={tableJumpPj} setExternalSel={setTableJumpPj} authorName={authorName} savePjMetaOverride={savePjMetaOverride} canEditMeta={canEditMeta}/>}
+            {/* selEtats/selPJs (même état que la liste) pour afficher un filtre État + PJ directement
+                dans la barre d'outils du Gantt (demandé explicitement) — partage le même état que la
+                liste, donc filtrer ici filtre aussi la liste et inversement. */}
+            {view==="gantt"&&<GanttView data={filtered} progress={progress} df={df}
+              selEtats={selEtats} setSelEtats={setSelEtats} allPJs={allPJs} selPJs={selPJs} setSelPJs={setSelPJs}
+              comments={comments} addComment={addComment} deleteComment={deleteComment}
+              pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}
+              addDelayComment={addDelayComment} deleteDelayComment={deleteDelayComment} authorName={authorName} savePjMetaOverride={savePjMetaOverride} canEditMeta={canEditMeta}/>}
+            {/* Même filtre État + PJ que le Gantt (demandé explicitement : "le même format au même
+                emplacement") — partage le même état que la liste/le Gantt, donc filtrer ici filtre
+                aussi les autres vues et inversement. */}
             {view==="calendar"&&<CalendarView data={filtered} onSelectPj={setCalSel}
               mode={calMode} setMode={setCalMode} anchor={calAnchor} setAnchor={setCalAnchor}
               dayAnchor={calDayAnchor} setDayAnchor={setCalDayAnchor} closurePeriods={closurePeriods}
               productionExclusions={productionExclusions} comments={comments} addComment={addComment}
-              zoomLevel={calZoom} setZoomLevel={setCalZoom} pinOk={pinOk}/>}
+              zoomLevel={calZoom} setZoomLevel={setCalZoom} pinOk={pinOk} authorName={authorName}
+              selEtats={selEtats} setSelEtats={setSelEtats} allPJs={allPJs} selPJs={selPJs} setSelPJs={setSelPJs}/>}
             {view==="comments"&&<CommentsView data={filtered} comments={comments} addComment={addComment} deleteComment={deleteComment}
-              pinOk={pinOk} addCommentMulti={addCommentMulti} jumpToPj={jumpToPj}/>}
+              pinOk={pinOk} addCommentMulti={addCommentMulti} jumpToPj={jumpToPj} authorName={authorName}/>}
           </div>
         )}
       </>
     )}
     {calSel&&<ProjectModal pj={calSel} data={dataWithOverrides} df={df} onClose={()=>setCalSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}
-      pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}/>}
+      pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}
+      addDelayComment={addDelayComment} deleteDelayComment={deleteDelayComment} authorName={authorName} savePjMetaOverride={savePjMetaOverride} canEditMeta={canEditMeta}/>}
+      </div>
+    </div>
     <span title="Version du code actuellement chargée" style={{position:"fixed",bottom:10,right:12,background:T.ink100,color:T.ink500,borderRadius:7,padding:"3px 11px",fontSize:12,fontWeight:600,fontFamily:"monospace",zIndex:9999,opacity:0.85}}>build {APP_BUILD_VERSION}</span>
+  </div>);
+}
+
+// ── Identité de l'utilisateur connecté, en haut de l'appli : on voit tout de suite
+// sous quel compte on est, avec un accès direct à la déconnexion. ──
+function UserChip({user,onSignOut}){
+  const [open,setOpen]=useState(false);
+  const ref=React.useRef(null);
+  useEffect(()=>{
+    const onClick=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",onClick);
+    return ()=>document.removeEventListener("mousedown",onClick);
+  },[]);
+  const name=user.displayName||user.email;
+  const initial=(name||"?").trim().charAt(0).toUpperCase();
+  return(<div ref={ref} style={{position:"relative"}}>
+    <button onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:9,background:T.surfaceAlt,border:"none",borderRadius:20,padding:"5px 13px 5px 6px",cursor:"pointer",color:T.ink900}}>
+      <span style={{width:26,height:26,borderRadius:"50%",background:T.teal500,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{initial}</span>
+      <span style={{fontSize:13.5,fontWeight:600,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:T.ink900}}>{name}</span>
+    </button>
+    {open&&<div style={{position:"absolute",top:"calc(100% + 8px)",right:0,background:T.card,borderRadius:10,boxShadow:T.shadowLg,padding:8,minWidth:200,zIndex:50}}>
+      <div style={{padding:"6px 10px 10px",borderBottom:"1px solid "+T.line,marginBottom:6}}>
+        <div style={{fontSize:13.5,fontWeight:700,color:T.ink900,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
+        <div style={{fontSize:12,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
+      </div>
+      <button onClick={onSignOut} style={{width:"100%",display:"flex",alignItems:"center",gap:8,background:"none",border:"none",borderRadius:7,padding:"8px 10px",fontSize:13.5,fontWeight:600,color:T.red500,cursor:"pointer",textAlign:"left"}}><NavIcon name="logout" size={15}/>Se déconnecter</button>
+    </div>}
   </div>);
 }
