@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { T } from "../theme";
-import { getPjMeta, initials, personTint, DriftDot, PersonIcon, CountryFlag, ETAT_META, ALL_ETATS, ALL_GAMMES, GAMME_COLORS, MONTHS, today } from "../pjMeta";
-import { fmt, diffDays, fmtMode } from "../parsers";
+import { getPjMeta, initials, personTint, DriftDot, PresenceChip, presenceKind, CountryFlag, ETAT_META, ALL_ETATS, ALL_GAMMES, GAMME_COLORS, MONTHS, today } from "../pjMeta";
+import { diffDays, fmtMode } from "../parsers";
 import { useSheetJS, Badge, DropFilter, NavIcon } from "./SharedUI";
 import { ProjectModal } from "./ProjectModal";
 
@@ -70,7 +70,8 @@ export function DateFormatPicker({df,setDf}){
 // Gamme/Projet/Pays élargis (ils étaient tronqués par l'ellipsis vu leur contenu — "Ajuster
 // automatiquement les colonnes pour qu'on puisse voir toutes les données") ; État réduit en
 // contrepartie car le badge est déjà compact depuis la réduction de sa police.
-export const DEFAULT_COL_WIDTHS_PCT={pj:7,projet:14,pays:9,chef:6,gamme:8,etat:10,arrivee:7,tests:10,finprod:7,depart:7,avancement:8,commentaires:7};
+// Colonnes de dates élargies : avec l'année (« 20/10/26 ») elles étaient tronquées par « … » (demandé : « dans l'onglet liste on ne voit pas l'année »).
+export const DEFAULT_COL_WIDTHS_PCT={pj:7,projet:12,pays:8,chef:5,gamme:7,etat:8,arrivee:9,tests:14,finprod:9,depart:9,avancement:7,commentaires:5};
 export function ResizeHandle({colId,nextColId,colWidths,setColWidths}){
   const onMouseDown=e=>{
     e.preventDefault();
@@ -106,6 +107,9 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
   const [selInternal,setSelInternal]=useState(null);
   const sel=externalSel!==undefined?externalSel:selInternal;
   const setSel=setExternalSel||setSelInternal;
+  // Volet de droite (fiche projet) réductible (demandé explicitement) — mémorisé entre les visites.
+  const [panelCollapsed,setPanelCollapsed]=useState(()=>{try{return localStorage.getItem("enogia_panelCollapsed")==="1";}catch(e){return false;}});
+  const togglePanel=()=>setPanelCollapsed(v=>{const n=!v;try{localStorage.setItem("enogia_panelCollapsed",n?"1":"0");}catch(e){}return n;});
   const [hiddenCols,setHiddenCols]=useState(new Set());
   const [colWidths,setColWidths]=useState(DEFAULT_COL_WIDTHS_PCT);
   useSheetJS();
@@ -225,13 +229,13 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
           </td>}
           {show("gamme")&&<td style={{padding:"10px 16px",color:T.ink500,fontSize:13.5,whiteSpace:"nowrap"}}><span style={{display:"inline-flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:GAMME_COLORS[r.gamme]||T.ink300,flexShrink:0}}/>{r.gamme}</span></td>}
           {show("etat")&&<td style={{padding:"10px 16px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><Badge etat={r.etat}/></td>}
-          {show("arrivee")&&<td style={{padding:"10px 16px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
-          {show("tests")&&<td style={{padding:"10px 16px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+          {show("arrivee")&&<td style={{padding:"10px 8px 10px 12px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.arrivee?new Date(r.arrivee):null,df)}</td>}
+          {show("tests")&&<td style={{padding:"10px 8px 10px 12px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap"}}>
             {r.tests?fmtMode(new Date(r.tests),df):"—"}{r.testsFin?" → "+fmtMode(new Date(r.testsFin),df):""}
-            {r.clientPresence?.present&&<span title={"Client/NOBO présent"+(r.clientPresence.date?" le "+r.clientPresence.date:"")} style={{marginLeft:7,fontSize:12,background:T.red100,color:T.red600,borderRadius:5,padding:"2px 6px",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><PersonIcon size={10} color={T.red600}/>{r.clientPresence.date?" "+fmt(new Date(r.clientPresence.date)):""}</span>}
+            {presenceKind(r.clientPresence)&&<span style={{display:"block",marginTop:3}}><PresenceChip kind={presenceKind(r.clientPresence)} date={r.clientPresence.date} compact/></span>}
           </td>}
-          {show("finprod")&&<td style={{padding:"10px 16px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
-          {show("depart")&&<td style={{padding:"10px 16px",fontWeight:600,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
+          {show("finprod")&&<td style={{padding:"10px 8px 10px 12px",color:T.ink700,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.finProd?new Date(r.finProd):null,df)}</td>}
+          {show("depart")&&<td style={{padding:"10px 8px 10px 12px",fontWeight:600,color:done?T.emerald600:urgent?T.amber600:T.ink900,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fmtMode(r.depart?new Date(r.depart):null,df)}</td>}
           {show("avancement")&&<td style={{padding:"10px 16px",whiteSpace:"nowrap",overflow:"hidden"}}>
             {pval!=null?<div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:44,background:T.surfaceAlt,borderRadius:20,height:4,overflow:"hidden"}}><div style={{width:pval+"%",height:"100%",background:pval>=100?T.emerald500:pval>=50?T.teal500:T.amber500,borderRadius:20}}/></div><span style={{fontSize:13.5,fontWeight:600,color:T.ink500}}>{pval}%</span></div>
             :<span style={{color:T.ink300}}>—</span>}
@@ -249,11 +253,18 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
   {/* flex:"2 1 300px" + maxWidth: colonne nettement plus étroite que la liste, et qui peut
       rétrécir jusqu'à 300px avant de repasser à la ligne — demandé explicitement ("la réduire
       en taille aussi pour que cela soit responsive"). */}
-  <div style={{flex:"2 1 300px",maxWidth:360,minWidth:260}}>
+  {panelCollapsed?
+    <div style={{flex:"0 0 36px",position:"sticky",top:16,alignSelf:"flex-start"}}>
+      <button onClick={togglePanel} title="Afficher le volet de droite" style={{width:36,height:36,borderRadius:9,border:"1px solid "+T.line,background:T.card,color:T.ink500,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700}}>‹</button>
+    </div>
+  :<div style={{flex:"2 1 300px",maxWidth:360,minWidth:260}}>
+    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
+      <button onClick={togglePanel} title="Réduire le volet" style={{height:26,padding:"0 10px",borderRadius:8,border:"1px solid "+T.line,background:"transparent",color:T.ink500,cursor:"pointer",fontSize:12,fontWeight:700}}>Réduire ›</button>
+    </div>
     <ProjectModal inline pj={sel} data={data} df={df} onClose={()=>setSel(null)} comments={comments} addComment={addComment} deleteComment={deleteComment}
       pinOk={pinOk} delays={delays} delayTypes={delayTypes} addDelayAllocation={addDelayAllocation} deleteDelayAllocation={deleteDelayAllocation}
       addDelayComment={addDelayComment} deleteDelayComment={deleteDelayComment} authorName={authorName} savePjMetaOverride={savePjMetaOverride} canEditMeta={canEditMeta}/>
-  </div>
+  </div>}
   </div>);
 }
 

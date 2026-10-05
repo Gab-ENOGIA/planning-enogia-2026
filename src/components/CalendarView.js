@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { T } from "../theme";
-import { getPjMeta, PersonIcon, MONTHS_FULL, today, ETAT_META, ALL_ETATS, ProjectLabelCell, relTime, Avatar } from "../pjMeta";
+import { getPjMeta, PresenceChip, presenceKind, presenceRing, PRESENCE_META, MONTHS_FULL, today, ETAT_META, ALL_ETATS, ProjectLabelCell, relTime, Avatar } from "../pjMeta";
 import { NavIcon, DropFilter } from "./SharedUI";
 import { fmt, toLocalISO, weekStartOf } from "../parsers";
 
@@ -41,12 +41,19 @@ export function getWeekStatus(r,weekStart,weekEnd){
 // par étape, mais plus douces"). Tuiles de nouveau remplies ("essaye de les remplir" — la liseré +
 // texte neutre essayée juste avant ne convenait pas) : "c" est la couleur de fond, "t" un ton foncé
 // de la même teinte prévu dès l'origine pour rester lisible dessus.
+const segThemed=(light,dark,bold)=>({
+  get c(){return(T.mode==="dark"?dark:light).c;},
+  get t(){return(T.mode==="dark"?dark:light).t;},
+  bold,
+});
+// En sombre : fond de tuile foncé teinté + texte clair de la même teinte (au lieu de pastels clairs
+// éblouissants avec du texte foncé).
 export const SEGMENT_STYLE={
-  "Arrivée":{c:"#C9B79C",t:"#5A4630",bold:false},
-  "Production":{c:"#9DBBD1",t:"#1F435C",bold:false},
-  "Tests":{c:"#E6CC8E",t:"#7A5A17",bold:true},
-  "Fin prod":{c:"#A8CBB2",t:"#2E5B3B",bold:true},
-  "Départ":{c:"#E6B291",t:"#8A431A",bold:true},
+  "Arrivée":segThemed({c:"#C9B79C",t:"#5A4630"},{c:"#3B3226",t:"#E6CDA8"},false),
+  "Production":segThemed({c:"#9DBBD1",t:"#1F435C"},{c:"#1F3A50",t:"#A3CDEB"},false),
+  "Tests":segThemed({c:"#E6CC8E",t:"#7A5A17"},{c:"#4A3C17",t:"#F2D68A"},true),
+  "Fin prod":segThemed({c:"#A8CBB2",t:"#2E5B3B"},{c:"#1D3F2B",t:"#A4E0B6"},true),
+  "Départ":segThemed({c:"#E6B291",t:"#8A431A"},{c:"#4A2A1A",t:"#F5B995"},true),
 };
 
 
@@ -77,11 +84,12 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   // permettra d'écrire en diagonale") — donne la place verticale nécessaire au texte en diagonale
   // dans les cellules jour (voir plus bas). Encore un peu plus haut qu'avant (64→72) : les tuiles
   // sont de nouveau remplies et le mot complet doit toujours tenir, sans jamais être coupé.
-  const rowH=72;
+  const rowH=46;
   // Bande "numéro de semaine" groupée (mode Jour uniquement, cf. plus bas) — décale d'autant les
   // lignes d'en-tête sticky qui suivent (Machine / en-tête semaine ou jour).
-  const WEEK_BAND_H=24;
-  const headerTop=34+(mode==="day"?WEEK_BAND_H:0);
+  const MONTH_H=26;
+  const WEEK_BAND_H=18;
+  const headerTop=MONTH_H+(mode==="day"?WEEK_BAND_H:0);
   // zoomLevel est désormais géré au niveau de App (props) pour persister quand on quitte/revient sur cet onglet
   const [commentPopup,setCommentPopup]=useState(null); // {pj, dateIso}
   // Fermeture au clavier (Échap), même comportement que la fiche projet (ProjectModal) — cohérence
@@ -104,19 +112,26 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   const maxZoomLevel=mode==="week"?WEEK_COUNTS.length-1:DAY_COUNTS.length-1;
   const nWeeks=WEEK_COUNTS[Math.min(zoomLevel,WEEK_COUNTS.length-1)];
   const nDays=DAY_COUNTS[Math.min(zoomLevel,DAY_COUNTS.length-1)];
+  // Le défilement horizontal ne marchait pas (demandé explicitement : "je n'arrive pas à voir les
+  // prochaines semaines à droite") : seules nDays/nWeeks colonnes étaient générées, en largeur
+  // flexible (1fr) — elles remplissaient donc toujours exactement l'écran, sans rien à faire défiler.
+  // Désormais le niveau de zoom fixe le nombre de colonnes VISIBLES à l'écran (donc leur largeur en
+  // px), et on génère une plage bien plus longue à défiler vers la droite.
+  const TOTAL_WEEKS=60, TOTAL_DAYS=300;
+  const [viewW,setViewW]=useState(1100);
   const zoomIn=()=>setZoomLevel(z=>Math.max(0,z-1));
   const zoomOut=()=>setZoomLevel(z=>Math.min(maxZoomLevel,z+1));
 
   const weeks=useMemo(()=>{
     const out=[];
-    for(let i=0;i<nWeeks;i++){const s=new Date(anchor);s.setDate(s.getDate()+i*7);out.push(s);}
+    for(let i=0;i<TOTAL_WEEKS;i++){const s=new Date(anchor);s.setDate(s.getDate()+i*7);out.push(s);}
     return out;
-  },[anchor,nWeeks]);
+  },[anchor,TOTAL_WEEKS]);
   const days=useMemo(()=>{
     const out=[];
-    for(let i=0;i<nDays;i++){const d=new Date(dayAnchor);d.setDate(d.getDate()+i);out.push(d);}
+    for(let i=0;i<TOTAL_DAYS;i++){const d=new Date(dayAnchor);d.setDate(d.getDate()+i);out.push(d);}
     return out;
-  },[dayAnchor,nDays]);
+  },[dayAnchor,TOTAL_DAYS]);
 
   const cols=mode==="week"?weeks:days;
   const pjs=useMemo(()=>[...new Set(data.map(r=>r.pj))].sort((a,b)=>{
@@ -125,6 +140,28 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
     const db=rb&&rb.arrivee?new Date(rb.arrivee):new Date(9999,0,1);
     return da-db;
   }),[data]);
+  // Largeurs calées sur les MOTS LES PLUS LONGS (demandé : « les colonnes se mettent parfaitement avec
+  // les mots les plus grands dans la ligne ») : on mesure le texte réel au canvas. Colonne « Machine » =
+  // plus long « PJ + gamme » / nom de projet ; colonnes de dates = plus long mot d'étape (« Production »…).
+  const measure=useMemo(()=>{
+    let ctx=null;try{ctx=document.createElement("canvas").getContext("2d");}catch(e){}
+    return (txt,font)=>{if(!ctx)return txt.length*7;ctx.font=font;return ctx.measureText(txt).width;};
+  },[]);
+  const LEFT_W=useMemo(()=>{
+    let w=0;
+    pjs.forEach(pj=>{
+      const r=data.find(x=>x.pj===pj);const m=getPjMeta(pj,r);
+      const l1=measure(pj,"700 13px "+T.fontMono)+8+measure(r?.gamme||"","italic 11px "+T.font);
+      const l2=measure(m.nomProjet||"","500 13px "+T.font);
+      w=Math.max(w,l1,l2);
+    });
+    return Math.min(300,Math.max(190,Math.ceil(w+14*2+22)));
+  },[pjs,data,measure]);
+  const longestWordPx=useMemo(()=>{
+    const f=mode==="week"?"700 13px "+T.font:"700 10.5px "+T.font;
+    let w=0;Object.keys(SEGMENT_STYLE).forEach(k=>k.split(" ").forEach(word=>{w=Math.max(w,measure(word,f));}));
+    return w;
+  },[mode,measure]);
   const weekNum=d=>{const j=new Date(d.getFullYear(),0,1);return Math.ceil(((d-j)/86400000+j.getDay()+1)/7);};
   const todayWeekIdx=weeks.findIndex(w=>{const e=new Date(w);e.setDate(e.getDate()+7);return today>=w&&today<e;});
   const todayDayIdx=days.findIndex(d=>d.toDateString()===today.toDateString());
@@ -137,19 +174,53 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   };
 
   const scrollRef=React.useRef(null);
+  useEffect(()=>{
+    const el=scrollRef.current;
+    if(!el)return;
+    const measure=()=>setViewW(el.clientWidth||1100);
+    measure();
+    if(typeof ResizeObserver==="undefined"){window.addEventListener("resize",measure);return ()=>window.removeEventListener("resize",measure);}
+    const ro=new ResizeObserver(measure);
+    ro.observe(el);
+    return ()=>ro.disconnect();
+  },[]);
+  const visCount=mode==="week"?nWeeks:nDays;
+  // Les colonnes doivent occuper TOUTE la largeur de la page (demandé explicitement : « les tuiles
+  // prennent la totalité de la largeur ») : on répartit la largeur disponible exactement sur les
+  // visCount colonnes visibles — jour ouvré = 1 part, week-end = 0,6 part — au lieu d'arrondir à
+  // l'entier inférieur, ce qui laissait un vide à droite. Le minimum garde les mots lisibles.
+  const WE_RATIO=0.6;
+  // Cause du « ça ne prend toujours pas toute la page » : un plancher de largeur (92/110 px) forçait
+  // les colonnes à dépasser dès que le zoom demandait trop de colonnes pour l'écran → la dernière
+  // était coupée et la grille ne tombait jamais juste. Désormais on compte les poids EXACTS des
+  // colonnes visibles (jours ouvrés 1, week-end 0,6) et, si l'écran est trop étroit pour le zoom
+  // demandé, on affiche quelques colonnes de moins plutôt que de déborder.
+  const MIN_COL=Math.ceil(longestWordPx+3*2+3*2+6); // inset de tuile + marge intérieure + filet
+  const avail=Math.max(200,viewW-LEFT_W);
+  const weightOf=n=>mode==="week"?n:days.slice(0,n).reduce((a,d)=>a+((d.getDay()===0||d.getDay()===6)?WE_RATIO:1),0);
+  let effCount=visCount;
+  while(effCount>1&&avail/weightOf(effCount)<MIN_COL)effCount--;
+  const unit=Math.floor((avail/weightOf(effCount))*100)/100;
+  const colPx=unit;
+  const wePx=Math.floor(unit*WE_RATIO*100)/100;
+  // Page précédente / suivante : défile d'environ une largeur d'écran.
+  const pageScroll=dir=>{if(scrollRef.current)scrollRef.current.scrollBy({left:dir*Math.round((viewW-LEFT_W)*0.85),behavior:"smooth"});};
 
   return(<div style={{background:T.surface,borderRadius:12,overflow:"hidden",border:"1px solid "+T.line,fontFamily:T.font}}>
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 18px",borderBottom:"1px solid "+T.line,background:T.surface,flexWrap:"wrap"}}>
       <div style={{display:"flex",gap:4,background:T.surfaceAlt,borderRadius:9,padding:3}}>
-        <button onClick={()=>setMode("week")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="week"?T.card:"transparent",color:mode==="week"?T.navy800:T.ink500,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:mode==="week"?T.shadowSm:"none"}}>Semaine</button>
-        <button onClick={()=>setMode("day")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="day"?T.card:"transparent",color:mode==="day"?T.navy800:T.ink500,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:mode==="day"?T.shadowSm:"none"}}>Jour</button>
+        <button onClick={()=>setMode("week")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="week"?T.card:"transparent",color:mode==="week"?T.ink900:T.ink500,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:mode==="week"?T.shadowSm:"none"}}>Semaine</button>
+        <button onClick={()=>setMode("day")} style={{padding:"6px 14px",borderRadius:7,border:"none",background:mode==="day"?T.card:"transparent",color:mode==="day"?T.ink900:T.ink500,fontWeight:700,fontSize:15,cursor:"pointer",boxShadow:mode==="day"?T.shadowSm:"none"}}>Jour</button>
       </div>
       <span style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:18,color:T.ink900,minWidth:220,textAlign:"center"}}>
         {mode==="week"
-          ?"Sem. "+weekNum(weeks[0])+" → "+weekNum(weeks[weeks.length-1])+", "+weeks[0].getFullYear()
-          :days[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" → "+days[days.length-1].toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})}
+          ?"Sem. "+weekNum(weeks[0])+" → "+weekNum(weeks[Math.min(effCount,weeks.length)-1])+", "+weeks[0].getFullYear()
+          :days[0].toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" → "+days[Math.min(effCount,days.length)-1].toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})}
       </span>
-      <span style={{fontSize:12,fontStyle:"italic",color:T.ink500}}>Faites défiler horizontalement pour naviguer →</span>
+      <div style={{display:"flex",gap:4}}>
+        <button onClick={()=>pageScroll(-1)} title="Période précédente" style={{padding:"5px 10px",borderRadius:7,border:"1px solid "+T.line,background:"transparent",color:T.ink700,fontSize:14,fontWeight:700,cursor:"pointer"}}>‹</button>
+        <button onClick={()=>pageScroll(1)} title="Période suivante" style={{padding:"5px 10px",borderRadius:7,border:"1px solid "+T.line,background:"transparent",color:T.ink700,fontSize:14,fontWeight:700,cursor:"pointer"}}>›</button>
+      </div>
       {/* Même filtre État + PJ que le Gantt, au même format et au même emplacement (demandé
           explicitement : "je veux le même format au même emplacement quelque chose de simple et
           discret") — partage le même état que la liste/le Gantt, donc filtrer ici filtre aussi les
@@ -167,11 +238,11 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
 
     <div ref={scrollRef}
       style={{overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 260px)"}}>
-      <div style={{display:"grid",gridTemplateColumns:"210px "+(mode==="week"
-        ?"repeat("+cols.length+",minmax(92px,1fr))"
-        :cols.map(d=>(d.getDay()===0||d.getDay()===6)?"minmax(18px,0.3fr)":"minmax(64px,1fr)").join(" ")
+      <div style={{display:"grid",width:"max-content",minWidth:"100%",gridTemplateColumns:LEFT_W+"px "+(mode==="week"
+        ?"repeat("+cols.length+","+colPx+"px)"
+        :cols.map(d=>(d.getDay()===0||d.getDay()===6)?wePx+"px":colPx+"px").join(" ")
       )}}>
-        <div style={{padding:"6px 14px",fontSize:13,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:0,zIndex:12,height:34,width:210,minWidth:210,maxWidth:210,boxSizing:"border-box"}}/>
+        <div style={{padding:"4px 14px",fontSize:12,fontWeight:700,color:T.ink300,background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:0,zIndex:12,height:MONTH_H,width:LEFT_W,minWidth:LEFT_W,maxWidth:LEFT_W,boxSizing:"border-box"}}/>
         {(()=>{
           // Regroupe les colonnes consécutives par mois pour afficher une bande "Mois Année" au-dessus
           const groups=[];
@@ -182,14 +253,14 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
             else groups.push({m,y,span:1});
           });
           return groups.map((g,gi)=>(
-            <div key={gi} style={{gridColumn:"span "+g.span,padding:"6px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,position:"sticky",top:0,zIndex:10,height:34,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center"}}>{MONTHS_FULL[g.m]} {g.y}</div>
+            <div key={gi} style={{gridColumn:"span "+g.span,padding:"2px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal600:T.ink500,background:g.m===today.getMonth()&&g.y===today.getFullYear()?T.teal100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,position:"sticky",top:0,zIndex:10,height:MONTH_H,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center"}}>{MONTHS_FULL[g.m]} {g.y}</div>
           ));
         })()}
 
         {/* Bande "numéro de semaine" séparée, une seule fois par semaine (mode Jour uniquement) —
             demandé explicitement : "séparer le numéro de semaine et le numéro du jour (regroupé le
             numéro de semaine en 1 fois)" plutôt que de le répéter dans chaque cellule de jour. */}
-        {mode==="day"&&<div style={{background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:34,zIndex:12,height:WEEK_BAND_H,width:210,minWidth:210,maxWidth:210,boxSizing:"border-box"}}/>}
+        {mode==="day"&&<div style={{background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:MONTH_H,zIndex:12,height:WEEK_BAND_H,width:LEFT_W,minWidth:LEFT_W,maxWidth:LEFT_W,boxSizing:"border-box"}}/>}
         {mode==="day"&&(()=>{
           const wgroups=[];
           days.forEach(d=>{
@@ -199,24 +270,24 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
             else wgroups.push({wn,wy,span:1});
           });
           return wgroups.map((g,gi)=>(
-            <div key={gi} style={{gridColumn:"span "+g.span,padding:"3px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:T.ink500,background:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,position:"sticky",top:34,zIndex:9,height:WEEK_BAND_H,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center"}}>S{g.wn}</div>
+            <div key={gi} style={{gridColumn:"span "+g.span,padding:"1px 4px",textAlign:"center",fontSize:10.5,fontWeight:700,color:T.ink500,background:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,position:"sticky",top:MONTH_H,zIndex:9,height:WEEK_BAND_H,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center"}}>S{g.wn}</div>
           ));
         })()}
 
-        <div style={{padding:"9px 14px",fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:headerTop,zIndex:12,width:210,minWidth:210,maxWidth:210,boxSizing:"border-box"}}>Machine</div>
+        <div style={{padding:"6px 14px",fontSize:11.5,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em",background:T.surface,borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,position:"sticky",left:0,top:headerTop,zIndex:12,width:LEFT_W,minWidth:LEFT_W,maxWidth:LEFT_W,boxSizing:"border-box"}}>Machine</div>
         {mode==="week"?weeks.map((w,wi)=>{
           const we=new Date(w);we.setDate(we.getDate()+7);
           const closed=isClosurePeriod(w,we);
-          return(<div key={wi} style={{padding:"9px 4px",textAlign:"center",fontSize:14,fontWeight:700,color:wi===todayWeekIdx?"#fff":closed?T.ink300:T.ink500,background:wi===todayWeekIdx?T.teal500:closed?T.ink100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:wi===todayWeekIdx?"inset 0 -3px 0 "+T.navy900:"none",position:"sticky",top:headerTop,zIndex:10}}>S{weekNum(w)}</div>);
+          return(<div key={wi} style={{padding:"6px 4px",textAlign:"center",fontSize:12,fontWeight:700,color:wi===todayWeekIdx?"#fff":closed?T.ink300:T.ink500,background:wi===todayWeekIdx?T.teal500:closed?T.ink100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:wi===todayWeekIdx?"inset 0 -3px 0 "+T.navy900:"none",position:"sticky",top:headerTop,zIndex:10}}>S{weekNum(w)}</div>);
         }):days.map((d,di)=>{
           const isWE=d.getDay()===0||d.getDay()===6;
           const dEnd=new Date(d);dEnd.setDate(dEnd.getDate()+1);
           const closed=isClosurePeriod(d,dEnd);
-          return(<div key={di} style={{padding:"6px 2px",textAlign:"center",background:di===todayDayIdx?T.teal500:closed?T.ink100:isWE?T.ink100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:di===todayDayIdx?"inset 0 -3px 0 "+T.navy900:"none",position:"sticky",top:headerTop,zIndex:10}}>
+          return(<div key={di} style={{padding:"3px 1px",textAlign:"center",background:di===todayDayIdx?T.teal500:closed?T.ink100:isWE?T.ink100:T.surface,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,boxShadow:di===todayDayIdx?"inset 0 -3px 0 "+T.navy900:"none",position:"sticky",top:headerTop,zIndex:10}}>
             {/* Numéro de semaine retiré d'ici (demandé explicitement) : il vit désormais uniquement
                 dans la bande groupée au-dessus. */}
-            <div style={{fontSize:13,fontWeight:600,color:di===todayDayIdx?"rgba(255,255,255,.85)":closed?T.ink300:T.ink300}}>{DAY_NAMES[d.getDay()]}</div>
-            <div style={{fontSize:17,fontWeight:700,color:di===todayDayIdx?"#fff":closed?T.ink300:T.ink700}}>{d.getDate()}</div>
+            <div style={{fontSize:9.5,fontWeight:600,lineHeight:1.2,color:di===todayDayIdx?"rgba(255,255,255,.85)":closed?T.ink300:T.ink300}}>{DAY_NAMES[d.getDay()]}</div>
+            <div style={{fontSize:12,fontWeight:700,lineHeight:1.25,color:di===todayDayIdx?"#fff":closed?T.ink300:T.ink700}}>{d.getDate()}</div>
           </div>);
         })}
 
@@ -228,7 +299,7 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
             {/* Même bloc "Projet" que le Gantt (demandé explicitement : "même type de projet entre le
                 gantt et le calendrier, ça doit être un copier-coller") — composant partagé, voir
                 pjMeta.js. */}
-            <div onClick={()=>onSelectPj&&onSelectPj(pj)} style={{padding:"6px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:2,height:rowH,width:210,minWidth:210,maxWidth:210,boxSizing:"border-box",borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,background:rowBg,position:"sticky",left:0,cursor:"pointer",overflow:"hidden",zIndex:5}}>
+            <div onClick={()=>onSelectPj&&onSelectPj(pj)} style={{padding:"6px 14px",display:"flex",flexDirection:"column",justifyContent:"center",gap:2,height:rowH,width:LEFT_W,minWidth:LEFT_W,maxWidth:LEFT_W,boxSizing:"border-box",borderBottom:"1px solid "+T.line,borderRight:"1px solid "+T.line,background:rowBg,position:"sticky",left:0,cursor:"pointer",overflow:"hidden",zIndex:5}}>
               <ProjectLabelCell pj={pj} r={r} meta={meta}/>
             </div>
             {mode==="week"?weeks.map((w,wi)=>{
@@ -240,14 +311,14 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
               if(!status)return<div key={wi} style={{height:rowH,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,background:cellBg}}/>;
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
-              const presenceDate=r.clientPresence?.present&&r.clientPresence.date?new Date(r.clientPresence.date):null;
+              const pKind=presenceKind(r.clientPresence);
+              const presenceDate=pKind&&r.clientPresence.date?new Date(r.clientPresence.date):null;
               const showPresence=presenceDate&&presenceDate>=w&&presenceDate<we;
               return(<div key={wi} onClick={()=>onSelectPj&&onSelectPj(pj)} onMouseEnter={e=>{e.currentTarget.style.background=T.teal100+"50";}} onMouseLeave={e=>{e.currentTarget.style.background=cellBg;}} style={{height:rowH,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,padding:3,cursor:"pointer",position:"relative",background:cellBg,transition:"background .12s ease"}}>
                 {/* Tuile de nouveau remplie (demandé explicitement : "essaye de les remplir") — le mot
                     complet doit toujours rester lisible ("je dois toujours réussir à lire l'intégralité
                     des mots"), donc texte qui s'enroule sur 2 lignes plutôt qu'une troncature. */}
-                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{height:"100%",background:st.c,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",textAlign:"center",fontSize:status.includes("+")?11:13,fontWeight:st.bold?700:600,color:st.t,overflow:"visible",whiteSpace:"normal",lineHeight:1.15,padding:"2px 6px",opacity:closed?0.45:1}}>{status}</div>
-                {showPresence&&<span style={{position:"absolute",top:-8,right:-8,fontSize:20,background:T.red500,border:"2px solid #fff",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:T.shadowMd,zIndex:5}}><PersonIcon size={18} color="#fff"/></span>}
+                <div title={status+(showPresence?" · Présence "+PRESENCE_META[pKind].label+" aux tests":"")} style={{height:"100%",background:st.c,borderRadius:4,boxShadow:showPresence?presenceRing(pKind):T.mode==="dark"?"inset 0 0 0 1px "+st.t+"33":"none",display:"flex",flexDirection:"column",gap:3,alignItems:"center",justifyContent:"center",textAlign:"center",fontSize:status.includes("+")?11:13,fontWeight:st.bold?700:600,color:st.t,overflow:"visible",whiteSpace:"normal",lineHeight:1.15,padding:"2px 6px",opacity:closed?0.45:1}}><span>{status}</span>{showPresence&&<PresenceChip kind={pKind} compact tiny/>}</div>
               </div>);
             }):days.map((d,di)=>{
               const isWE=d.getDay()===0||d.getDay()===6;
@@ -269,17 +340,18 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
               </div>);
               const lastMilestone=status.split(" + ").pop();
               const st=SEGMENT_STYLE[lastMilestone]||SEGMENT_STYLE["Production"];
-              const showPresence=r.clientPresence?.present&&r.clientPresence.date&&new Date(r.clientPresence.date).toDateString()===d.toDateString();
+              const pKind=presenceKind(r.clientPresence);
+              const showPresence=pKind&&r.clientPresence.date&&new Date(r.clientPresence.date).toDateString()===d.toDateString();
               // Texte en diagonale (demandé explicitement : "agrandir la hauteur des lignes ... ça
               // permettra d'écrire en diagonale") pour que le mot complet tienne dans la colonne jour,
               // étroite. Centré au milieu de la tuile (pivot au centre, plutôt qu'ancré au coin
               // bas-gauche) et contenu dans la tuile (overflow:"hidden" sur le conteneur) — demandé
               // explicitement : "les étapes sont pas au milieu des tiles et dépassent de celles-ci".
               return(<div key={di} className="enogia-cal-daycell" onClick={()=>onSelectPj&&onSelectPj(pj)} onMouseEnter={e=>{e.currentTarget.style.background=T.teal100+"50";}} onMouseLeave={e=>{e.currentTarget.style.background=cellBg;}} style={{height:rowH,borderBottom:"1px solid "+T.line,borderLeft:"1px solid "+T.line,cursor:"pointer",background:cellBg,position:"relative",transition:"background .12s ease"}}>
-                <div title={status+(showPresence?" · Client/NOBO présent":"")} style={{position:"absolute",inset:3,borderRadius:4,background:st.c,overflow:"hidden",opacity:closed?0.45:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <span style={{whiteSpace:"nowrap",fontSize:10,fontWeight:st.bold?700:600,color:st.t,transform:"rotate(-30deg)",transformOrigin:"center"}}>{status}</span>
+                <div title={status+(showPresence?" · Présence "+PRESENCE_META[pKind].label+" aux tests":"")} style={{position:"absolute",inset:3,borderRadius:4,background:st.c,boxShadow:showPresence?presenceRing(pKind):T.mode==="dark"?"inset 0 0 0 1px "+st.t+"33":"none",overflow:"hidden",opacity:closed?0.45:1,display:"flex",flexDirection:"column",gap:2,alignItems:"center",justifyContent:"center",padding:"0 3px"}}>
+                  <span style={{fontSize:10.5,fontWeight:st.bold?700:600,color:st.t,textAlign:"center",lineHeight:1.15}}>{status}</span>
+                  {showPresence&&<PresenceChip kind={pKind} compact tiny fontSize={9.5}/>}
                 </div>
-                {showPresence&&<span style={{position:"absolute",top:-7,right:-7,fontSize:17,background:T.red500,border:"2px solid #fff",borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:T.shadowMd,zIndex:5}}><PersonIcon size={14} color="#fff"/></span>}
                 <button onClick={openCommentPopup} className={"enogia-cal-commentbtn"+(hasComment?" has-comment":"")} title={hasComment?dayComments.length+" commentaire(s) ce jour":"Ajouter un commentaire ce jour"} style={{position:"absolute",bottom:-6,left:-4,background:hasComment?T.card:"none",border:hasComment?"1.5px solid "+T.teal500:"none",borderRadius:hasComment?"50%":0,boxShadow:hasComment?T.shadowSm:"none",width:hasComment?24:16,height:hasComment?24:16,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:hasComment?T.teal600:T.ink300,padding:0,zIndex:8}}><NavIcon name="comments" size={hasComment?13:11}/></button>
               </div>);
             })}
@@ -294,6 +366,10 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
         <span style={{width:14,height:14,borderRadius:4,background:st.c}}/>
         <span style={{color:T.ink700,fontWeight:500}}>{label}</span>
       </span>)}
+      <span style={{display:"flex",alignItems:"center",gap:8,paddingLeft:16,borderLeft:"1px solid "+T.line}}>
+        <span style={{fontSize:14,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".03em"}}>Présence tests :</span>
+        <PresenceChip kind="client" compact fontSize={12}/><PresenceChip kind="nobo" compact fontSize={12}/><PresenceChip kind="both" compact fontSize={12}/>
+      </span>
       <span style={{fontSize:14,color:T.ink300,marginLeft:"auto"}}>Couleur de la tuile = étape · Clic = détail</span>
     </div>
 

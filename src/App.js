@@ -6,7 +6,7 @@ import "./styles.css";
 
 import { T, setThemeMode } from "./theme";
 import { getPjMeta, ALL_GAMMES, ALL_ETATS, MONTHS, today, setSyncedPjMeta, setPjMetaOverrides, GAMME_OVERRIDE, EXCLUDED_CHEFS } from "./pjMeta";
-import { weekStartOf, fetchSuiviORC } from "./parsers";
+import { weekStartOf } from "./parsers";
 import { ImportButton, PinGate, PIN, NavIcon } from "./components/SharedUI";
 import { GanttView } from "./components/GanttView";
 import { ProjectModal } from "./components/ProjectModal";
@@ -33,8 +33,7 @@ const DEFAULT_DELAY_TYPES=[
   "Aléas planning client","Retard études","Manque de main d'œuvre","Autre",
 ];
 
-const APP_BUILD_VERSION="2026-10-02-v68-commentaires-style-chat-partout";
-console.log("🔵 planning-enogia-2026 build:",APP_BUILD_VERSION);
+const APP_BUILD_VERSION = "2026-10-05-v80-retards-kanban-compteur-auto-depuis-19-05";
 
 export default function App(){
   // Utilisateur connecté via Google, restreint aux comptes @enogia.com (null tant que non connecté).
@@ -90,6 +89,16 @@ export default function App(){
   setThemeMode(darkMode); // mute T en place avant que quoi que ce soit ne le lise pendant ce rendu
   useEffect(()=>{
     try{localStorage.setItem("enogia_darkMode",darkMode?"1":"0");}catch(e){}
+    // Contrôles natifs (barres de défilement, sélecteurs de date, listes déroulantes) et fond de page
+    // suivent le thème ; variables CSS lues par les infobulles/légendes des graphiques (styles.css).
+    const root=document.documentElement;
+    root.style.colorScheme=darkMode?"dark":"light";
+    document.body.style.background=T.surface;
+    root.style.setProperty("--e-card",T.card);
+    root.style.setProperty("--e-line",T.line);
+    root.style.setProperty("--e-ink900",T.ink900);
+    root.style.setProperty("--e-ink700",T.ink700);
+    root.style.setProperty("--e-ink300",T.ink300);
   },[darkMode]);
 
   const [data,setData]=useState([]);
@@ -215,10 +224,16 @@ export default function App(){
     }
   },[]);
 
-  const toggleProductionExclusion=useCallback(async (pj,dateIso)=>{
-    const current=productionExclusions[pj]||[];
-    const next=current.includes(dateIso)?current.filter(d=>d!==dateIso):[...current,dateIso];
-    const nextAll={...productionExclusions,[pj]:next};
+  // Exclusion/réactivation de plusieurs jours d'un coup (clic-glisser dans le mini-calendrier Production).
+  // On applique tous les jours en une seule écriture : des appels successifs repartiraient du même état « productionExclusions »
+  // (fermeture figée) et seul le dernier jour serait enregistré (défaut de l'ancienne gestion « période »). entries = { pj: [dateIso, …] }.
+  const setProductionExclusionDays=useCallback(async (entries,exclude)=>{
+    const nextAll={...productionExclusions};
+    Object.entries(entries).forEach(([pj,dates])=>{
+      const cur=new Set(nextAll[pj]||[]);
+      dates.forEach(d=>{if(exclude)cur.add(d);else cur.delete(d);});
+      nextAll[pj]=[...cur].sort();
+    });
     try{
       await setDoc(OVERRIDES_DOC_REF(), { productionExclusions:nextAll }, { merge:true });
     }catch(e){
@@ -238,21 +253,18 @@ export default function App(){
   },[]);
 
   // Lecture temps réel du cache de synchro "Suivi ORC" (noms / pays / chefs de projet), partagé pour tous les utilisateurs
-  const [pjMetaSyncInfo,setPjMetaSyncInfo]=useState(null); // {lastSync, count}
+  // (Bouton « Sync depuis Suivi ORC » retiré du Manager pour l'instant — on garde seulement la lecture du cache déjà synchronisé.)
   useEffect(()=>{
     const unsub = onSnapshot(PJ_META_SYNC_DOC_REF(), (snap)=>{
       if(snap.exists()){
         const d=snap.data();
         setSyncedPjMeta(d.meta||{});
-        setPjMetaSyncInfo({lastSync:d.lastSync||null,count:Object.keys(d.meta||{}).length});
       }
     }, (err)=>{
       console.error("Erreur Firestore (pjMetaSync):", err);
     });
     return ()=>unsub();
   },[]);
-  const [syncingORC,setSyncingORC]=useState(false);
-  const [syncORCError,setSyncORCError]=useState("");
 
   // Lecture temps réel des corrections manuelles de fiche projet (nom/pays/chef), saisies dans l'app.
   // Prioritaires sur la synchro Suivi ORC — c'est la dernière main humaine sur la donnée.
@@ -278,20 +290,6 @@ export default function App(){
       return false;
     }
   },[pjOverridesState]);
-
-  const syncFromSuiviORC=useCallback(async ()=>{
-    setSyncingORC(true);setSyncORCError("");
-    try{
-      const{meta,count}=await fetchSuiviORC();
-      const lastSync=new Date().toLocaleString("fr-FR");
-      await setDoc(PJ_META_SYNC_DOC_REF(), { meta, lastSync, count });
-      // SYNCED_PJ_META et pjMetaSyncInfo seront mis à jour automatiquement via onSnapshot ci-dessus
-    }catch(e){
-      console.error(e);
-      setSyncORCError(e.message||"Erreur inconnue lors de la synchronisation.");
-    }
-    setSyncingORC(false);
-  },[]);
 
   const addComment=useCallback(async (pj,author,text,linkedDate,isPrivate)=>{
     if(!author.trim()||!text.trim())return false;
@@ -613,7 +611,7 @@ export default function App(){
             paraissait toujours minuscule. enogia-logo-color-crop.svg est recadré au plus près
             du dessin (mark + "enogia"), donc la même hauteur rend un logo visuellement ~3x
             plus grand qu'avant, comme demandé — sans avoir à démesurer toute la barre d'en-tête. */}
-        <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" width="105" height="42" style={{height:42,width:"auto",objectFit:"contain",flexShrink:0}}/>
+        <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" width="105" height="42" style={{height:42,width:"auto",objectFit:"contain",flexShrink:0,filter:darkMode?"brightness(0) invert(1)":"none"}}/>
         <div style={{width:1,height:26,background:T.teal400,opacity:.35,flexShrink:0}}/>
         {/* Fraunces (empattements fins) : même police que tous les autres titres/intitulés de
             section de l'appli (ManagerPanel, fiche projet, etc.) — déjà "la police utilisée partout"
@@ -673,10 +671,9 @@ export default function App(){
               etatChoice={etatChoice} setEtatFor={setEtatFor} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}
               tab={managerTab} setTab={setManagerTab} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}
               closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriodsAndSave}
-              productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}
-              pjMetaSyncInfo={pjMetaSyncInfo} syncingORC={syncingORC} syncORCError={syncORCError} syncFromSuiviORC={syncFromSuiviORC}
-              comments={comments} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypesAndSave} addDelayAllocationMulti={addDelayAllocationMulti}
-              managerEmails={managerEmails} setManagerEmails={setManagerEmailsAndSave} currentUserEmail={currentUser?.email} authorName={authorName}/>
+              productionExclusions={productionExclusions} setProductionExclusionDays={setProductionExclusionDays}
+              comments={comments} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypesAndSave} addDelayAllocationMulti={addDelayAllocationMulti} deleteDelayAllocation={(pj,id)=>deleteDelayAllocation(pj,id,PIN)}
+              managerEmails={managerEmails} setManagerEmails={setManagerEmailsAndSave} currentUserEmail={currentUser?.email} authorName={authorName} buildVersion={canEditMeta?APP_BUILD_VERSION:null}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(
@@ -728,7 +725,6 @@ export default function App(){
       addDelayComment={addDelayComment} deleteDelayComment={deleteDelayComment} authorName={authorName} savePjMetaOverride={savePjMetaOverride} canEditMeta={canEditMeta}/>}
       </div>
     </div>
-    <span title="Version du code actuellement chargée" style={{position:"fixed",bottom:10,right:12,background:T.ink100,color:T.ink500,borderRadius:7,padding:"3px 11px",fontSize:12,fontWeight:600,fontFamily:"monospace",zIndex:9999,opacity:0.85}}>build {APP_BUILD_VERSION}</span>
   </div>);
 }
 

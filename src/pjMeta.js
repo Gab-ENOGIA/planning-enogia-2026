@@ -195,6 +195,44 @@ export function PersonIcon({size,color}){
     <path d="M4 21c0-4.42 3.58-8 8-8s8 3.58 8 8" fill={color||"currentColor"}/>
   </svg>);
 }
+// Présence aux tests — demandé : « choisir si c'est le client, le NOBO ou les 2 avec un système de
+// couleur ». Une couleur par présence (client = violet, NOBO = vert) ; « les deux » combine les deux
+// teintes (dégradé net 50/50) pour se lire d'un coup d'œil sans lire le texte. Getters : T est muté
+// au changement de thème, une constante figée garderait les couleurs claires en mode sombre.
+export const PRESENCE_KINDS=["client","nobo","both"];
+// Teintes demandées « légères » : client = violet doux, NOBO = orange doux. « color » = liseré/accent
+// (moyen), « bg » = fond pastel de la pastille, « ink » = texte foncé lisible sur le pastel (clair ou sombre).
+export const PRESENCE_META={
+  client:{key:"client",label:"Client",short:"Client",color:"#A18CE0",bg:"#E4DCFA",ink:"#4A3A8F"},
+  nobo:{key:"nobo",label:"NOBO",short:"NOBO",color:"#F0A55C",bg:"#FFE2C2",ink:"#8A4A0C"},
+  both:{key:"both",label:"Client + NOBO",short:"Les deux",color:"#A18CE0",color2:"#F0A55C",bg:"#E4DCFA",bg2:"#FFE2C2",ink:"#4D3F6B"},
+};
+// Anciennes saisies (« present:true » sans « who », faites avant ce choix) = les deux, comme
+// l'ancien libellé « Client/NOBO présent » — aucune donnée n'est perdue ni réécrite.
+export function presenceKind(cp){
+  if(!cp||!cp.present)return null;
+  return PRESENCE_KINDS.includes(cp.who)?cp.who:"both";
+}
+export function presenceBg(kind){
+  const m=PRESENCE_META[kind];
+  return m.bg2?"linear-gradient(90deg,"+m.bg+" 0%,"+m.bg+" 50%,"+m.bg2+" 50%,"+m.bg2+" 100%)":m.bg;
+}
+// Ceinture de la tuile (calendrier) : un seul liseré plein, ou deux demi-liserés pour « les deux ».
+export function presenceRing(kind){
+  const m=PRESENCE_META[kind];
+  return m.color2?"inset 4px 0 0 "+m.color+", inset -4px 0 0 "+m.color2:"inset 0 0 0 2px "+m.color;
+}
+export function PresenceChip({kind,date,compact,fontSize,tiny}){
+  if(!kind)return null;
+  const m=PRESENCE_META[kind];
+  const fs=fontSize||(compact?11:12);
+  const dd=date?String(date).slice(8,10)+"/"+String(date).slice(5,7)+"/"+String(date).slice(2,4):"";
+  return(
+    <span title={"Présence "+m.label+" aux tests"+(date?" le "+date:"")} style={{display:"inline-flex",alignItems:"center",gap:4,background:presenceBg(kind),color:m.ink,boxShadow:m.color2?"none":"inset 0 0 0 1px "+m.color,borderRadius:compact?5:6,padding:compact?"1px 6px":"2px 8px",fontSize:fs,fontWeight:800,lineHeight:1.3,whiteSpace:"nowrap",fontFamily:T.font}}>
+      <PersonIcon size={fs+1} color={m.ink}/>{tiny&&kind==="both"?"C + N":m.label}{dd&&!compact?" · "+dd:""}
+    </span>
+  );
+}
 // SVG vectoriel (plus la miniature PNG h20, qui devenait floue en l'agrandissant) — demandé
 // explicitement ("les drapeaux à gauche ne sont pas assez clairs") : flagcdn fournit le même
 // drapeau en vecteur net à n'importe quelle taille, sans changer de fournisseur ni ajouter de
@@ -210,13 +248,23 @@ export function CountryFlag({pays,size}){
 // Palette de gammes volontairement sourdes (tons rompus plutôt que couleurs vives) pour un rendu plus classe, à
 // l'identique en clair/sombre puisqu'utilisée uniquement comme petit point indicateur, jamais en aplat.
 export const GAMME_COLORS={"180LTV3":"#5068b0","100LTV3":"#8a76b5","40LTV3":"#5a9e85","180MT":"#b86a63","100MT":"#b68a56","20LTV3":"#4f8f96","10LTV3":"#7c9a5a","40LTV2R":"#bb9456","100LTV2R":"#9479ab","CONTENEUR":"#8a9199"};
+// Couleurs d'état sensibles au thème : T est muté en place au changement de mode, mais un objet figé
+// à l'import garderait les valeurs claires — d'où les accesseurs (lus à chaque rendu). En sombre : fonds
+// teintés très foncés + texte clair, au lieu des pastels clairs qui éblouissaient.
+const etatThemed=(light,dark,label)=>({
+  get bg(){return(T.mode==="dark"?dark:light).bg;},
+  get text(){return(T.mode==="dark"?dark:light).text;},
+  get border(){return(T.mode==="dark"?dark:light).border;},
+  get bar(){return(T.mode==="dark"?dark:light).bar;},
+  label,
+});
 export const ETAT_META={
-  "SHIPPED":{bg:"#e7f2ec",text:"#3d7a62",border:"#c7e1d4",bar:"#5a9e85",label:"Expédiée"},
-  "PROD":{bg:"#eaedf8",text:"#45548f",border:"#d2d8f0",bar:"#5068b0",label:"Production ENOGIA"},
-  "En fabrication":{bg:"#f6ede1",text:"#92653a",border:"#ecd9bf",bar:"#b68a56",label:"Fabrication FNR"},
-  "STOCKAGE_EXT":{bg:"#eceef1",text:"#5c6672",border:"#dadfe4",bar:"#8a9199",label:"Stockage Externe"},
-  "NOT ORDERED":{bg:"#f6e9e8",text:"#95453f",border:"#ecd2cf",bar:"#b86a63",label:"Non commandée"},
-  "A_DEFINIR":{bg:T.surfaceAlt,text:T.ink500,border:T.ink100,bar:T.ink300,label:"À définir"}
+  "SHIPPED":etatThemed({bg:"#e7f2ec",text:"#3d7a62",border:"#c7e1d4",bar:"#5a9e85"},{bg:"#14261F",text:"#7FCBA9",border:"#1F3D31",bar:"#4C9C7E"},"Expédiée"),
+  "PROD":etatThemed({bg:"#eaedf8",text:"#45548f",border:"#d2d8f0",bar:"#5068b0"},{bg:"#171E36",text:"#9FB0EC",border:"#26315A",bar:"#6580D0"},"Production ENOGIA"),
+  "En fabrication":etatThemed({bg:"#f6ede1",text:"#92653a",border:"#ecd9bf",bar:"#b68a56"},{bg:"#2A2114",text:"#E4BC82",border:"#46361F",bar:"#C79A5C"},"Fabrication FNR"),
+  "STOCKAGE_EXT":etatThemed({bg:"#eceef1",text:"#5c6672",border:"#dadfe4",bar:"#8a9199"},{bg:"#1E2429",text:"#A9B3BE",border:"#303942",bar:"#84909C"},"Stockage Externe"),
+  "NOT ORDERED":etatThemed({bg:"#f6e9e8",text:"#95453f",border:"#ecd2cf",bar:"#b86a63"},{bg:"#2D1A1A",text:"#F0A29C",border:"#4A2A2A",bar:"#D0746C"},"Non commandée"),
+  "A_DEFINIR":{get bg(){return T.surfaceAlt;},get text(){return T.ink500;},get border(){return T.ink100;},get bar(){return T.ink300;},label:"À définir"},
 };
 export const ALL_ETATS=Object.keys(ETAT_META);
 export const ASSIGNABLE_ETATS=ALL_ETATS.filter(e=>e!=="A_DEFINIR");
@@ -227,14 +275,18 @@ export const ASSIGNABLE_ETATS=ALL_ETATS.filter(e=>e!=="A_DEFINIR");
 // suite. Pastille = couleur de l'État (comme la liste), pas la couleur cyclique par machine.
 export function ProjectLabelCell({pj,r,meta}){
   const c=ETAT_META[r.etat]||ETAT_META["NOT ORDERED"];
+  // Le numéro de PJ et le nom du projet doivent TOUJOURS être lisibles (demandé explicitement) :
+  // 1re ligne = pastille d'état + code + gamme, 2e ligne = drapeau + nom du projet sur toute la largeur
+  // (la gamme n'est plus collée au nom, c'est elle qui faisait tronquer le nom). Infobulle = nom complet.
   return(<>
-    <div style={{display:"flex",alignItems:"center",gap:8}}>
+    <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
       <div style={{width:8,height:8,borderRadius:"50%",background:c.bar,flexShrink:0}}/>
-      <span style={{fontSize:15,fontWeight:700,color:T.teal600,fontFamily:T.fontMono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{pj}</span>
+      <span style={{fontSize:14.5,fontWeight:700,color:T.teal600,fontFamily:T.fontMono,whiteSpace:"nowrap",flexShrink:0}}>{pj}</span>
+      <span style={{fontStyle:"italic",fontSize:11,color:T.ink300,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0}}>{r.gamme}</span>
     </div>
-    <div style={{display:"flex",alignItems:"center",gap:6,paddingLeft:16,overflow:"hidden"}}>
+    <div title={meta.nomProjet||""} style={{display:"flex",alignItems:"center",gap:6,paddingLeft:15,minWidth:0}}>
       <CountryFlag pays={meta.pays} size={11}/>
-      <span style={{fontSize:13,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.nomProjet} <span style={{fontStyle:"italic",fontSize:11,color:T.ink300}}>({r.gamme})</span></span>
+      <span style={{fontSize:12.5,color:T.ink500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{meta.nomProjet}</span>
     </div>
   </>);
 }
@@ -242,6 +294,11 @@ export const ALL_GAMMES=Object.keys(GAMME_COLORS);
 export const MONTHS=["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"];
 export const MONTHS_FULL=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 export const today=new Date();
+// Machines livrées depuis le 1er janvier (calcul automatique : départ passé dans l'année en cours).
+export function countShippedYTD(rows){
+  const y=today.getFullYear();
+  return rows.filter(r=>r.depart&&new Date(r.depart).getFullYear()===y&&new Date(r.depart)<=today).length;
+}
 
 
 // Noms à ne plus proposer dans les listes de choix "Chef de projet" (référentiel/synchro obsolète),

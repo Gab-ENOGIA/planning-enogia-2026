@@ -59,7 +59,7 @@ export function LoginScreen(){
 
       {/* Logo remonté en haut et largement agrandi (demandé explicitement), plutôt que centré avec
           le reste du contenu. */}
-      <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" style={{height:92,width:"auto",marginBottom:46,position:"relative",zIndex:1,flexShrink:0}}/>
+      <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" style={{height:92,width:"auto",marginBottom:46,position:"relative",zIndex:1,flexShrink:0,filter:T.mode==="dark"?"brightness(0) invert(1)":"none"}}/>
 
       <div style={{flex:1,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",position:"relative",zIndex:1}}>
         {!started?(
@@ -124,12 +124,12 @@ export function LoginScreen(){
 export function LoginTransition({name}){
   const firstName=(name||"").trim().split(/\s+/)[0]||"";
   return(
-    <div className="enogia-fade-in" style={{position:"fixed",inset:0,zIndex:10000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"rgba(253,251,246,.55)",backdropFilter:"blur(26px) saturate(1.15)",WebkitBackdropFilter:"blur(26px) saturate(1.15)",fontFamily:ROBOTO}}>
-      <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" style={{height:132,width:"auto",marginBottom:28,filter:"drop-shadow(0 8px 24px rgba(18,27,48,.16))",animation:"enogiaLogoPulse 1.3s ease-in-out infinite"}}/>
-      {firstName&&<div className="enogia-float-in" style={{fontSize:28,fontWeight:700,color:T.teal600,letterSpacing:".005em",textShadow:"0 1px 0 rgba(255,255,255,.6)"}}>Bienvenue, {firstName}</div>}
+    <div className="enogia-fade-in" style={{position:"fixed",inset:0,zIndex:10000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:T.mode==="dark"?"rgba(15,20,25,.6)":"rgba(253,251,246,.55)",backdropFilter:"blur(26px) saturate(1.15)",WebkitBackdropFilter:"blur(26px) saturate(1.15)",fontFamily:ROBOTO}}>
+      <img src={process.env.PUBLIC_URL+"/enogia-logo-color-crop.svg"} alt="ENOGIA" style={{height:132,width:"auto",marginBottom:28,filter:T.mode==="dark"?"brightness(0) invert(1)":"drop-shadow(0 8px 24px rgba(18,27,48,.16))",animation:"enogiaLogoPulse 1.3s ease-in-out infinite"}}/>
+      {firstName&&<div className="enogia-float-in" style={{fontSize:28,fontWeight:700,color:T.teal600,letterSpacing:".005em",textShadow:T.mode==="dark"?"none":"0 1px 0 rgba(255,255,255,.6)"}}>Bienvenue, {firstName}</div>}
       {/* Phrase d'accroche sur le suivi de projet, demandée explicitement, en plus du message de
           bienvenue. */}
-      <div className="enogia-float-in" style={{fontSize:15,color:T.ink500,marginTop:8,textShadow:"0 1px 0 rgba(255,255,255,.6)"}}>Le suivi de vos projets, à jour en temps réel.</div>
+      <div className="enogia-float-in" style={{fontSize:15,color:T.ink500,marginTop:8,textShadow:T.mode==="dark"?"none":"0 1px 0 rgba(255,255,255,.6)"}}>Le suivi de vos projets, à jour en temps réel.</div>
     </div>
   );
 }

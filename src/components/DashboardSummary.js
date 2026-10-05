@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { T } from "../theme";
-import { getPjMeta, ETAT_META, GAMME_COLORS, today } from "../pjMeta";
+import { getPjMeta, ETAT_META, GAMME_COLORS, countShippedYTD } from "../pjMeta";
 
 // Bandeau de synthèse en haut de la page : nombre de machines expédiées depuis le 1er janvier +
 // répartition de l'ensemble du portefeuille par gamme / pays / chef de projet / état. Les 4
 // répartitions sont affichées en petits camemberts côte à côte (plutôt qu'un seul gros camembert
 // avec des onglets pour changer de dimension) pour occuper l'espace horizontal disponible au lieu
 // de laisser un grand vide à droite — demandé explicitement.
+const SHIPPED_SINCE_LABEL="19/05/2026"; // date de la première machine du site
 const DIMENSIONS=[
   {key:"gamme",label:"Gamme"},
   {key:"pays",label:"Pays"},
@@ -36,10 +37,9 @@ export function DashboardSummary({data,allData}){
     });
   };
 
-  const shippedYTD=useMemo(()=>{
-    const y=today.getFullYear();
-    return fullData.filter(r=>r.depart&&new Date(r.depart).getFullYear()===y&&new Date(r.depart)<=today).length;
-  },[fullData]);
+  // Compteur 100 % automatique (départs passés), compté depuis la première machine présente sur le
+  // site : le 19/05/2026 (demandé : « garder la base auto … dire que c'est depuis le 19/05 »).
+  const shippedYTD=useMemo(()=>countShippedYTD(fullData),[fullData]);
 
   // Une répartition (breakdown) par dimension, calculées ensemble pour les 4 petits camemberts.
   const breakdownsByDim=useMemo(()=>{
@@ -74,7 +74,7 @@ export function DashboardSummary({data,allData}){
         séparé du reste par un simple filet. L'en-tête reste fixe, avec le contrôle d'affichage ancré à droite. */}
     <div style={{display:"flex",alignItems:"center",gap:14}}>
       <span style={{fontSize:12,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".05em"}}>Vue d'ensemble</span>
-      {collapsed&&<span style={{fontSize:13.5,color:T.ink700}}><strong style={{color:T.teal600}}>{shippedYTD}</strong> expédiée{shippedYTD>1?"s":""} en {today.getFullYear()}</span>}
+      {collapsed&&<span style={{fontSize:13.5,color:T.ink700}}><strong style={{color:T.teal600}}>{shippedYTD}</strong> expédiée{shippedYTD>1?"s":""} depuis le {SHIPPED_SINCE_LABEL}</span>}
       <button onClick={toggleCollapsed} title={collapsed?"Afficher la répartition":"Masquer la répartition"} style={{marginLeft:"auto",flexShrink:0,width:26,height:26,borderRadius:8,border:"none",background:"transparent",cursor:"pointer",color:T.ink300,display:"flex",alignItems:"center",justifyContent:"center"}}
         onMouseEnter={e=>{e.currentTarget.style.background=T.surface;}}
         onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
@@ -87,7 +87,7 @@ export function DashboardSummary({data,allData}){
     {!collapsed&&<div style={{display:"flex",alignItems:"center",gap:28,flexWrap:"wrap",marginTop:18}}>
       <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:150,flexShrink:0}}>
         <div style={{fontSize:40,fontWeight:700,color:T.teal600,fontFamily:T.fontMontserrat,lineHeight:1}}>{shippedYTD}</div>
-        <div style={{fontSize:13,color:T.ink500}}>machine{shippedYTD>1?"s":""} livrée{shippedYTD>1?"s":""}<br/>depuis le 1ᵉʳ janvier {today.getFullYear()}</div>
+        <div style={{fontSize:13,color:T.ink500}}>machine{shippedYTD>1?"s":""} livrée{shippedYTD>1?"s":""}<br/>depuis le {SHIPPED_SINCE_LABEL}</div>
       </div>
 
       <div style={{width:1,alignSelf:"stretch",background:T.teal400,opacity:.3,flexShrink:0}}/>

@@ -4,7 +4,13 @@ import { getPjMeta, ETAT_META, ALL_ETATS, MONTHS, today, ProjectLabelCell } from
 import { DropFilter } from "./SharedUI";
 import { ProjectModal } from "./ProjectModal";
 
-export const PHASES=[{k:"arrivee",l:"A",c:T.teal500,t:"Arrivée"},{k:"tests",l:"T",c:T.amber500,t:"Tests"},{k:"finProd",l:"F",c:T.emerald500,t:"Fin prod"},{k:"depart",l:"D",c:T.red500,t:"Départ"}];
+// Couleurs lues à chaque rendu (accesseurs) : un tableau figé à l'import garderait le thème clair.
+export const PHASES=[
+  {k:"arrivee",l:"A",get c(){return T.teal500;},t:"Arrivée"},
+  {k:"tests",l:"T",get c(){return T.amber500;},t:"Tests"},
+  {k:"finProd",l:"F",get c(){return T.emerald500;},t:"Fin prod"},
+  {k:"depart",l:"D",get c(){return T.red500;},t:"Départ"},
+];
 
 // selEtats/selPJs (demandé explicitement : "mettre en place un système de filtre pour enlever
 // certain PJ ou certain état") — même état que la liste (App.js), donc filtrer ici filtre aussi la

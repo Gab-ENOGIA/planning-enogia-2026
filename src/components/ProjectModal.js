@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { T } from "../theme";
-import { getPjMeta, PersonIcon, CountryFlag, MONTHS_FULL, today, ALL_GAMMES, getAllChefs, ALL_PAYS, relTime, Avatar } from "../pjMeta";
+import { getPjMeta, PresenceChip, presenceKind, CountryFlag, MONTHS_FULL, today, ALL_GAMMES, getAllChefs, ALL_PAYS, relTime, Avatar } from "../pjMeta";
 import { fmt, fmtMode } from "../parsers";
-import { Badge, NavIcon, Select } from "./SharedUI";
+import { Badge, NavIcon, Select, DelayScopeNote } from "./SharedUI";
 import { PHASES } from "./GanttView";
 
 // La fiche projet (panneau de droite) doit rester "blanche mate entièrement" (demandé
@@ -95,7 +95,7 @@ export function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComme
       <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         <Badge etat={r.etat}/>
         <span style={{fontSize:13.5,color:T.ink500,alignSelf:"center"}}>{r.gamme}</span>
-        {r.clientPresence?.present&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:14,background:T.red100,color:T.red500,borderRadius:7,padding:"4px 10px",fontWeight:700}}><PersonIcon size={14} color={T.red500}/> Client/NOBO présent{r.clientPresence.date?" — "+fmt(new Date(r.clientPresence.date)):""}</span>}
+        {presenceKind(r.clientPresence)&&<PresenceChip kind={presenceKind(r.clientPresence)} date={r.clientPresence.date} fontSize={13}/>}
       </div>
 
       {/* ── Onglets : séparer la vue d'ensemble des commentaires évite d'avoir à
@@ -116,11 +116,11 @@ export function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComme
             ("il faut que les 4 tuiles soient sur la même ligne avec la même taille"). Police et
             padding réduits en conséquence pour que ça tienne même à ~260-300px de large. */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:14}}>
-          {PHASES.map(ph=>{const d=r[ph.k]?new Date(r[ph.k]):null;const showPresence=ph.k==="tests"&&r.clientPresence?.present;return(
+          {PHASES.map(ph=>{const d=r[ph.k]?new Date(r[ph.k]):null;const showPresence=ph.k==="tests"&&presenceKind(r.clientPresence);return(
             <div key={ph.k} style={{background:T.neuPanel,borderRadius:9,padding:"6px 5px",borderTop:"3px solid "+ph.c,position:"relative",minWidth:0}}>
               <div style={{color:T.ink500,fontSize:8.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".02em",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ph.t}</div>
               <div style={{fontWeight:700,color:T.ink900,fontSize:12,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d?fmtMode(d,df):"—"}</div>
-              {showPresence&&<span title="Client/NOBO présent" style={{position:"absolute",top:-6,right:-6,fontSize:15,background:T.red100,border:"1.5px solid "+T.red500,borderRadius:"50%",width:16,height:16,display:"flex",alignItems:"center",justifyContent:"center"}}><PersonIcon size={9} color={T.red500}/></span>}
+              {showPresence&&<div style={{marginTop:3}}><PresenceChip kind={presenceKind(r.clientPresence)} compact fontSize={9}/></div>}
             </div>
           );})}
         </div>
@@ -329,6 +329,7 @@ function DelayAllocations({pj,delays,delayTypes,addDelayAllocation,deleteDelayAl
       <input type="number" min="1" value={days} onChange={e=>{setDays(e.target.value);setErr("");}} placeholder="Jours" style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
       {!authorName&&<input type="text" value={authorInput} onChange={e=>{setAuthorInput(e.target.value);setErr("");}} placeholder="Votre nom" maxLength={40} style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>}
     </div>
+    <DelayScopeNote/>
     {/* Zone de note agrandie (textarea, plus input une ligne) — demandé explicitement ("plus de
         place pour les notes") : une note comme "Des absences en production et un test de pression
         capricieux." tenait à peine dans l'ancien champ. */}

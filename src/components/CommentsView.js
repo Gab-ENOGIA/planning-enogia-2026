@@ -3,8 +3,19 @@ import { T } from "../theme";
 import { fmt } from "../parsers";
 import { getPjMeta, CountryFlag, relTime, Avatar } from "../pjMeta";
 import { PjChecklist, NavIcon } from "./SharedUI";
+import { CommentsKanban } from "./CommentsKanban";
 
 export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCommentMulti,jumpToPj,authorName}){
+  // Vue Kanban (une colonne par PJ + colonne des commentaires groupés) ou Fil (liste + conversation) —
+  // choix mémorisé.
+  const [mode,setMode]=useState(()=>{try{return localStorage.getItem("enogia_commentsMode")||"kanban";}catch(e){return "kanban";}});
+  const changeMode=m=>{setMode(m);try{localStorage.setItem("enogia_commentsMode",m);}catch(e){}};
+  // Affichage du Kanban (tuiles réduites, 2 étages) et mode "présentation" qui masque les commentaires
+  // privés même en accès Manager (demandé explicitement : ne pas les montrer en partage d'écran).
+  const lsBool=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:v==="1";}catch(e){return d;}};
+  const [hidePrivate,setHidePrivate]=useState(()=>lsBool("enogia_cmtHidePrivate",false));
+  const flip=(k,set)=>set(v=>{const n=!v;try{localStorage.setItem(k,n?"1":"0");}catch(e){}return n;});
+  const seePrivate=pinOk&&!hidePrivate;
   const [search,setSearch]=useState("");
   const [multiSelectMode,setMultiSelectMode]=useState(false);
   const [viewPjs,setViewPjs]=useState(new Set());
@@ -25,7 +36,7 @@ export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCo
     Object.entries(comments).forEach(([pj,list])=>list.forEach((c,idx)=>out.push({...c,pj,_idx:idx})));
     return out;
   },[comments]);
-  const visibleComments=pinOk?allComments:allComments.filter(c=>!c.private);
+  const visibleComments=seePrivate?allComments:allComments.filter(c=>!c.private);
 
   // Aperçu par PJ pour la liste de gauche : dernier commentaire visible + total
   const perPj=useMemo(()=>{
@@ -108,7 +119,24 @@ export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCo
     composeTargets.length===1?composeTargets[0]:
     composeTargets.length+" PJ sélectionnés";
 
-  return(<div style={{display:"flex",gap:14,fontFamily:T.font,height:"calc(100vh - 200px)",minHeight:520}}>
+  const modeToggle=(<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+    <div style={{display:"flex",gap:4,background:T.surfaceAlt,borderRadius:9,padding:3}}>
+      {[["kanban","Kanban"],["fil","Fil"]].map(([k,l])=><button key={k} onClick={()=>changeMode(k)} style={{padding:"5px 14px",borderRadius:7,border:"none",background:mode===k?T.card:"transparent",color:mode===k?T.teal600:T.ink500,fontWeight:700,fontSize:13,cursor:"pointer",boxShadow:mode===k?T.shadowSm:"none"}}>{l}</button>)}
+    </div>
+    {pinOk&&<button onClick={()=>flip("enogia_cmtHidePrivate",setHidePrivate)} title="Masquer les commentaires privés (partage d'écran)" style={{padding:"5px 11px",borderRadius:8,border:"1px solid "+(hidePrivate?T.amber500:T.line),background:hidePrivate?T.amber100:"transparent",color:hidePrivate?T.amber600:T.ink500,fontSize:12.5,fontWeight:700,cursor:"pointer",marginLeft:"auto"}}>{hidePrivate?"Privés masqués":"Masquer les privés"}</button>}
+    {mode==="kanban"&&<input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un PJ, un projet, un texte…" style={{width:260,padding:"6px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,color:T.ink700,background:T.card}}/>}
+  </div>);
+
+  if(mode==="kanban")return(<div style={{fontFamily:T.font}}>
+    {modeToggle}
+    <CommentsKanban data={data} comments={comments} addComment={addComment} deleteComment={deleteComment} pinOk={seePrivate} isAdmin={pinOk} hidePrivate={hidePrivate} onTogglePrivate={()=>flip("enogia_cmtHidePrivate",setHidePrivate)} authorName={authorName} jumpToPj={jumpToPj} search={search}
+      onOpenThread={pj=>{setMultiSelectMode(false);selectSingle(pj);changeMode("fil");}}
+      onGroupCompose={()=>{setViewAll(false);setMultiSelectMode(true);changeMode("fil");}}/>
+  </div>);
+
+  return(<div style={{fontFamily:T.font}}>
+  {modeToggle}
+  <div style={{display:"flex",gap:14,fontFamily:T.font,height:"calc(100vh - 250px)",minHeight:480}}>
 
     {/* ── Liste des fils (par PJ) ── */}
     <div style={{width:280,flexShrink:0,background:T.card,borderRadius:14,boxShadow:T.shadowMd,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -293,5 +321,6 @@ export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCo
         </div>}
       </>}
     </div>
+  </div>
   </div>);
 }

@@ -17,6 +17,15 @@ export function useSheetJS(){
 
 // Réduit encore (demandé explicitement : "réduire la police pour l'état") — la pastille garde son
 // fond/bordure propres mais passe sous la taille du reste des colonnes du tableau.
+// Mention demandée à chaque saisie de retard : « en rouge et italique, en petit, que ce retard peut
+// mettre en retard uniquement les PJ après » (+ petite icône de danger).
+export function DelayScopeNote(){
+  return(<div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:11,fontStyle:"italic",color:T.red500,lineHeight:1.35,margin:"2px 0 6px"}}>
+    <span style={{display:"inline-flex",flexShrink:0,marginTop:1}}><NavIcon name="warning" size={12}/></span>
+    <span>Attention : ce retard ne peut décaler que les PJ planifiés après celui-ci, jamais ceux d'avant.</span>
+  </div>);
+}
+
 export function Badge({etat}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];const urgent=etat==="NOT ORDERED";return <span className={urgent?"enogia-pulse-urgent":""} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:20,padding:"2.5px 10px 2.5px 8px",fontSize:12,fontWeight:600,letterSpacing:".01em",display:"inline-flex",alignItems:"center",gap:5,boxShadow:"0 1px 2px rgba(15,40,60,.08)",maxWidth:"100%",boxSizing:"border-box"}}><span style={{width:6,height:6,borderRadius:"50%",background:c.bar,flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.label||etat}</span></span>;}
 
 export function DropFilter({label,options,selected,onChange,getLabel,icon}){
@@ -77,11 +86,11 @@ export function DropFilter({label,options,selected,onChange,getLabel,icon}){
 // liste "manque de premium") — un <select> natif reste dessous pour l'accessibilité et le picker
 // natif mobile, mais son rendu par défaut (flèche système, look plat) est masqué et remplacé par le
 // même habillage que le reste de l'appli (bordure fine, coins arrondis, chevron maison).
-export function Select({value,onChange,options,getLabel,placeholder,style}){
+export function Select({value,onChange,options,getLabel,placeholder,style,compact}){
   const disp=o=>getLabel?getLabel(o):o;
   return(
     <div style={{position:"relative",display:"inline-block",width:style?.width||"100%"}}>
-      <select value={value} onChange={onChange} style={{appearance:"none",WebkitAppearance:"none",MozAppearance:"none",width:"100%",padding:"8px 30px 8px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:13.5,fontWeight:600,fontFamily:T.font,color:T.ink700,background:T.card,cursor:"pointer",...style}}>
+      <select value={value} onChange={onChange} style={{appearance:"none",WebkitAppearance:"none",MozAppearance:"none",width:"100%",padding:compact?"4px 26px 4px 9px":"8px 30px 8px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:compact?12.5:13.5,fontWeight:600,fontFamily:T.font,color:T.ink700,background:T.card,cursor:"pointer",...style}}>
         {placeholder&&<option value="" disabled>{placeholder}</option>}
         {options.map(o=>(typeof o==="object"?<option key={o.value} value={o.value}>{o.label}</option>:<option key={o} value={o}>{disp(o)}</option>))}
       </select>
@@ -152,7 +161,7 @@ export function PinGate({onUnlock}){
 }
 
 
-export function ImportButton({onImport, busy, label, accent, helpText, warnText, confirmMessage, hasExisting, inputId}){
+export function ImportButton({onImport, busy, label, accent, helpText, warnText, confirmMessage, hasExisting, inputId, iconOnly}){
   const [open,setOpen]=useState(false);
   const [pos,setPos]=useState({top:0,left:0});
   const btnRef=React.useRef(null);
@@ -205,10 +214,10 @@ export function ImportButton({onImport, busy, label, accent, helpText, warnText,
   };
 
   return(<div style={{position:"relative",fontFamily:T.font}}>
-    <button ref={btnRef} onClick={openMenu} disabled={busy} style={{padding:"5px 9px",borderRadius:7,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:11,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:5,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
+    <button ref={btnRef} onClick={openMenu} disabled={busy} title={iconOnly?btnLabel:undefined} style={iconOnly?{width:26,height:26,borderRadius:7,border:"1px solid "+T.line,background:"transparent",color:T.ink500,fontWeight:700,fontSize:15,lineHeight:1,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",justifyContent:"center",padding:0}:{padding:"5px 9px",borderRadius:7,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:11,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:5,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
       onMouseEnter={e=>{if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=T.shadowMd;}}}
       onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=T.shadowSm;}}>
-      {busy?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NavIcon name="upload" size={10}/>{btnLabel}</span>}
+      {iconOnly?(busy?"…":"⋯"):busy?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NavIcon name="upload" size={10}/>{btnLabel}</span>}
     </button>
     {open&&!busy&&<>
       <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>

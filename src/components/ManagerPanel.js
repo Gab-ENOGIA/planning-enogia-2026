@@ -1,26 +1,23 @@
 import React, { useState, useMemo } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 import { T } from "../theme";
-import { getPjMeta, initials, PersonIcon, CountryFlag, GAMME_COLORS, ETAT_META, ALL_ETATS, ASSIGNABLE_ETATS, ALL_GAMMES, MONTHS, today } from "../pjMeta";
+import { getPjMeta, initials, GAMME_COLORS, ETAT_META, ALL_ETATS, ALL_GAMMES, MONTHS, today } from "../pjMeta";
 import { fmt, toLocalISO, diffDays, weekStartOf } from "../parsers";
-import { Badge, DropFilter, ImportButton, NavIcon, PjChecklist } from "./SharedUI";
+import { DropFilter, ImportButton, NavIcon, Select } from "./SharedUI";
+import { CARD, KpiRow, EmptyNote, AvancementTab, StatutTab, KpiAvancement, DelayInsights, DelaysTab, ProductionCalendarManager } from "./ManagerParts";
+import { ProjectFileManager } from "./ManagerFiche";
 
 // Filtre de période (mois et/ou année) réutilisable sur chaque graphique temporel
 export function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMonth=true}){
   return(<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-    <select value={year||""} onChange={e=>setYear(e.target.value?+e.target.value:null)} style={{padding:"4px 8px",borderRadius:7,border:"1px solid "+T.line,fontSize:12,fontFamily:T.font,color:T.ink700,background:T.card}}>
-      <option value="">Toutes années</option>
-      {yearsAvailable.map(y=><option key={y} value={y}>{y}</option>)}
-    </select>
-    {showMonth&&<select value={month==null?"":month} onChange={e=>setMonth(e.target.value===""?null:+e.target.value)} style={{padding:"4px 8px",borderRadius:7,border:"1px solid "+T.line,fontSize:12,fontFamily:T.font,color:T.ink700,background:T.card}}>
-      <option value="">Tous les mois</option>
-      {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
-    </select>}
+    <div style={{width:128}}><Select compact value={year||""} onChange={e=>setYear(e.target.value?+e.target.value:null)} options={[{value:"",label:"Toutes années"},...yearsAvailable.map(y=>({value:y,label:String(y)}))]}/></div>
+    {showMonth&&<div style={{width:128}}><Select compact value={month==null?"":month} onChange={e=>setMonth(e.target.value===""?null:+e.target.value)} options={[{value:"",label:"Tous les mois"},...MONTHS.map((m,i)=>({value:i,label:m}))]}/></div>}
   </div>);
 }
-export function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,toggleProductionExclusion,pjMetaSyncInfo,syncingORC,syncORCError,syncFromSuiviORC,comments,delays,delayTypes,setDelayTypes,addDelayAllocationMulti,managerEmails,setManagerEmails,currentUserEmail,authorName}){
+export function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,setProductionExclusionDays,comments,delays,delayTypes,setDelayTypes,addDelayAllocationMulti,deleteDelayAllocation,managerEmails,setManagerEmails,currentUserEmail,authorName,buildVersion}){
   const [fEtat,setFEtat]=useState(new Set(ALL_ETATS));
   const [kpiStep,setKpiStep]=useState("depart");
+  const [kpiTab,setKpiTab]=useState("synthese"); // sous-onglet KPI par famille
   const [chargeYear,setChargeYear]=useState(null);
   const [chargeMonth,setChargeMonth]=useState(null);
   const [satYear,setSatYear]=useState(null);
@@ -291,79 +288,73 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
     return ALL_ETATS.map(e=>({etat:ETAT_META[e].label,n:fd.filter(r=>r.etat===e).length,c:ETAT_META[e].bar})).filter(d=>d.n>0);
   },[fd]);
 
-  return(<div style={{display:"flex",flexDirection:"column",gap:20,fontFamily:T.font}}>
-    <div style={{background:T.card,borderRadius:16,padding:"18px 22px",boxShadow:T.shadowMd}}>
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-        <DropFilter label="Statut" options={ALL_ETATS} selected={fEtat} onChange={setFEtat} getLabel={o=>ETAT_META[o]?.label||o}/>
-        <DropFilter label="Gamme" options={ALL_GAMMES} selected={fGamme} onChange={setFGamme}/>
-        <button onClick={()=>{setFEtat(new Set(ALL_ETATS));setFGamme(new Set(ALL_GAMMES));}} style={{padding:"7px 13px",borderRadius:9,border:"1.5px solid "+T.line,background:T.card,fontSize:16,cursor:"pointer",color:T.red500,fontWeight:600}}>✕ Effacer</button>
-        <span style={{fontSize:16,color:T.ink500,alignSelf:"center",fontWeight:500}}>{fd.length} unités</span>
-        <div style={{marginLeft:"auto"}}>
-          <ImportButton
-            onImport={onInitialImport}
-            busy={initialImporting}
-            label="Importer planning initial"
-            accent={"linear-gradient(135deg,"+T.teal600+","+T.navy700+")"}
-            hasExisting={initialData.length>0}
-            inputId="msp-file-initial"
-            confirmMessage={"Un planning initial a déjà été importé"+(lastInitialImport?(" le "+lastInitialImport):"")+".\n\nCe planning sert de référence figée pour calculer les dérives — il ne devrait normalement être importé qu'une seule fois.\n\nÊtes-vous sûr de vouloir l'écraser ?"}
-            helpText={<>Export Excel (.xlsx) avec colonnes <b>Nom, Début, Niveau hiérarchique</b>.<br/>Ce planning sera <b>figé</b> et servira de référence pour calculer les dérives par rapport au planning révisé.</>}
-            warnText="Ce planning devient la référence figée (dates initiales) — à importer une seule fois normalement."
-          />
-        </div>
+  // ── Navigation Manager : onglets horizontaux + sous-onglets par famille ──
+  // « Il y a bcp de KPI… plusieurs petits onglets par famille de KPI ? » → un sous-onglet par famille.
+  const GROUP_OF={fiche:"fiche",derives:"derives",avancement:"suivi",statut:"suivi",retards:"retards",acces:"reglages",vacances:"reglages",production:"reglages"};
+  const TOP=[["fiche","Fiche projet","list","fiche"],["derives","KPI","chart","derives"],["suivi","Suivi","gauge","avancement"],["retards","Retards","warning","retards"],["reglages","Réglages","lock","production"]];
+  const SUBS={
+    derives:[["synthese","Synthèse"],["derives","Dérives"],["charge","Charge"],["avancement","Avancement"],["retards","Retards"]],
+    suivi:[["avancement","Avancement"],["statut","Statut & état"]],
+    reglages:[["production","Production"],["vacances","Vacances"],["acces","Accès Manager"]],
+  };
+  const group=GROUP_OF[tab]||"derives";
+  const subItems=SUBS[group]||null;
+  const subValue=group==="derives"?kpiTab:tab;
+  const onSub=id=>{if(group==="derives")setKpiTab(id);else setTab(id);};
+  const showFilters=tab==="derives"||tab==="avancement"||tab==="statut";
+  const hasInitial=initialData.length>0;
+
+  return(<div style={{display:"flex",flexDirection:"column",gap:14,fontFamily:T.font}}>
+    {/* ── Barre d'onglets + petite tuile « planning initial » ── */}
+    <div style={{display:"flex",alignItems:"flex-end",gap:18,flexWrap:"wrap",borderBottom:"1px solid "+T.line}}>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {TOP.map(([id,l,icon,first])=>{const on=group===id;return(
+          <button key={id} onClick={()=>{if(!on)setTab(first);}} style={{padding:"10px 14px",border:"none",borderBottom:"2px solid "+(on?T.teal500:"transparent"),marginBottom:-1,background:"transparent",color:on?T.teal600:T.ink500,fontWeight:on?700:600,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontFamily:T.font,transition:"color .15s ease"}}
+            onMouseEnter={e=>{if(!on)e.currentTarget.style.color=T.ink900;}} onMouseLeave={e=>{if(!on)e.currentTarget.style.color=T.ink500;}}><NavIcon name={icon} size={15}/>{l}</button>
+        );})}
       </div>
-      {initialData.length>0&&<div style={{fontSize:14,color:T.teal600,marginTop:12,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><NavIcon name="pin" size={14}/>Planning initial figé · {initialData.length} unités{lastInitialImport?" · importé le "+lastInitialImport:""}</div>}
-      {initialData.length===0&&<div style={{fontSize:14,color:T.amber600,marginTop:12,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><NavIcon name="warning" size={14}/>Aucun planning initial importé — les dérives ne peuvent pas être calculées.</div>}
-      <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid "+T.line,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-        <button onClick={syncFromSuiviORC} disabled={syncingORC} style={{padding:"10px 20px",borderRadius:10,border:"none",background:syncingORC?T.surfaceAlt:"linear-gradient(135deg,"+T.teal500+","+T.navy700+")",color:syncingORC?T.ink300:"#fff",fontSize:15,fontWeight:700,cursor:syncingORC?"default":"pointer",display:"flex",alignItems:"center",gap:8,boxShadow:syncingORC?"none":T.shadowSm,transition:"transform .12s, box-shadow .12s",flexShrink:0}}
-          onMouseDown={e=>{if(!syncingORC)e.currentTarget.style.transform="scale(0.97)";}}
-          onMouseUp={e=>{e.currentTarget.style.transform="scale(1)";}}
-          onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";}}>
-          {syncingORC?<span style={{display:"inline-flex",alignItems:"center",gap:8}}><span style={{width:14,height:14,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Synchronisation...</span>:"Sync depuis Suivi ORC"}
-        </button>
-        <div style={{fontSize:13.5,color:T.ink500,lineHeight:1.5,flex:1,minWidth:260}}>
-          Récupère noms de projet, pays et chefs de projet depuis l'onglet <b>"Suivi ORC"</b> du Google Sheet officiel.
-          {pjMetaSyncInfo&&pjMetaSyncInfo.lastSync&&<><br/><span style={{color:T.teal600,fontWeight:600}}>✓ Dernière synchro : {pjMetaSyncInfo.lastSync} · {pjMetaSyncInfo.count} PJ</span></>}
-          {!pjMetaSyncInfo?.lastSync&&<><br/><span style={{color:T.ink300}}>Jamais synchronisé — les données figées dans le code sont utilisées.</span></>}
+      <div style={{marginLeft:"auto",marginBottom:6,display:"flex",alignItems:"center",gap:9,padding:"4px 5px 4px 11px",border:"1px solid "+(hasInitial?T.line:T.amber500),borderRadius:10,background:hasInitial?T.card:T.amber100}}>
+        <span style={{color:hasInitial?T.teal600:T.amber600,display:"inline-flex"}}><NavIcon name={hasInitial?"pin":"warning"} size={13}/></span>
+        <div style={{lineHeight:1.25}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.ink900}}>Planning initial</div>
+          <div style={{fontSize:11,color:hasInitial?T.ink500:T.amber600}}>{hasInitial?initialData.length+" unités"+(lastInitialImport?" · "+lastInitialImport:" · figé"):"non importé — dérives indisponibles"}</div>
         </div>
-        {syncORCError&&<div style={{fontSize:14,color:T.red600,background:T.red100,padding:"8px 12px",borderRadius:8,width:"100%",display:"flex",alignItems:"center",gap:7}}><NavIcon name="warning" size={14}/>{syncORCError}</div>}
+        <ImportButton
+          iconOnly
+          onImport={onInitialImport}
+          busy={initialImporting}
+          label="Importer planning initial"
+          accent={"linear-gradient(135deg,"+T.teal500+","+T.navy700+")"}
+          hasExisting={hasInitial}
+          inputId="msp-file-initial"
+          confirmMessage={"Un planning initial a déjà été importé"+(lastInitialImport?(" le "+lastInitialImport):"")+".\n\nCe planning sert de référence figée pour calculer les dérives — il ne devrait normalement être importé qu'une seule fois.\n\nÊtes-vous sûr de vouloir l'écraser ?"}
+          helpText={<>Export Excel (.xlsx) avec colonnes <b>Nom, Début, Niveau hiérarchique</b>.<br/>Ce planning sera <b>figé</b> et servira de référence pour calculer les dérives par rapport au planning révisé.</>}
+          warnText="Ce planning devient la référence figée (dates initiales) — à importer une seule fois normalement."
+        />
       </div>
     </div>
 
-    <div style={{display:"flex",gap:20,alignItems:"flex-start"}}>
-      {/* ── Sous-navigation Manager, groupée par catégorie ── */}
-      <nav style={{width:220,flexShrink:0,background:T.card,borderRadius:16,boxShadow:T.shadowMd,padding:14,position:"sticky",top:14,display:"flex",flexDirection:"column",gap:18}}>
-        {[
-          {group:"Vue d'ensemble",items:[["fiche","list","Fiche Projet"],["derives","chart","KPIs & Dérives"]]},
-          {group:"Suivi production",items:[["avancement","gauge","Avancement"],["statut","tag","Statut & État"]]},
-          {group:"Configuration",items:[["retards","warning","Retards"],["acces","lock","Accès Manager"],["vacances","sun","Vacances"],["production","factory","Production"]]},
-        ].map(sec=>(
-          <div key={sec.group}>
-            <div style={{fontSize:11,fontWeight:700,color:T.ink300,textTransform:"uppercase",letterSpacing:".05em",padding:"0 10px",marginBottom:6}}>{sec.group}</div>
-            <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {sec.items.map(([id,icon,l])=><button key={id} onClick={()=>setTab(id)} style={{padding:"10px 12px",borderRadius:10,border:"none",background:tab===id?T.teal100:"transparent",color:tab===id?T.teal600:T.ink700,fontWeight:tab===id?700:500,fontSize:14.5,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"left",transition:"background .15s ease"}}
-                onMouseEnter={e=>{if(tab!==id)e.currentTarget.style.background=T.surface;}}
-                onMouseLeave={e=>{if(tab!==id)e.currentTarget.style.background="transparent";}}><NavIcon name={icon} size={16}/>{l}</button>)}
-            </div>
-          </div>
-        ))}
-      </nav>
+    {/* ── Sous-onglets (famille de KPI, pages de suivi, réglages) + filtres ── */}
+    {(subItems||showFilters)&&<div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+      {subItems&&<div style={{display:"inline-flex",gap:2,padding:3,background:T.surface,border:"1px solid "+T.line,borderRadius:10}}>
+        {subItems.map(([id,l])=>{const on=subValue===id;return(
+          <button key={id} onClick={()=>onSub(id)} style={{padding:"5px 13px",borderRadius:8,border:"none",background:on?T.card:"transparent",boxShadow:on?T.shadowSm:"none",color:on?T.teal600:T.ink500,fontWeight:on?700:600,fontSize:13,cursor:"pointer",fontFamily:T.font,transition:"background .12s ease"}}>{l}</button>
+        );})}
+      </div>}
+      {showFilters&&<div style={{marginLeft:subItems?"auto":0,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <DropFilter label="Statut" options={ALL_ETATS} selected={fEtat} onChange={setFEtat} getLabel={o=>ETAT_META[o]?.label||o}/>
+        <DropFilter label="Gamme" options={ALL_GAMMES} selected={fGamme} onChange={setFGamme}/>
+        <button onClick={()=>{setFEtat(new Set(ALL_ETATS));setFGamme(new Set(ALL_GAMMES));}} title="Réinitialiser les filtres" style={{background:"none",border:"none",padding:0,fontSize:10.5,color:T.ink300,cursor:"pointer",textDecoration:"underline",fontFamily:T.font}}>Effacer</button>
+        <span style={{fontSize:12.5,color:T.ink500,fontWeight:500}}>{fd.length} unités</span>
+      </div>}
+    </div>}
 
-      {/* ── Contenu de l'onglet sélectionné ── */}
-      <div style={{flex:1,minWidth:0}}>
-    {tab==="derives"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:16}}>
-        {[[fd.length,"Total",T.teal500],[shipped.length,"Expédiées",T.emerald500],[inProd.length,"En production",T.amber500],[upcoming.length,"Départs < 30j",T.red500],[avgDureeProd==null?"—":avgDureeProd+"j","Durée moy. production",T.violet500]].map(([v,l,c])=>(
-          <div key={l} style={{background:T.card,borderRadius:12,padding:"18px 20px",borderTop:"3px solid "+c,boxShadow:T.shadowMd}}>
-            <div style={{fontFamily:T.fontDisplay,fontSize:36,fontWeight:700,color:T.ink900}}>{v}</div>
-            <div style={{fontSize:15,fontWeight:600,color:T.ink500,marginTop:3}}>{l}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18}}>
-        {countByEtat.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Répartition par état</div>
+    <div style={{minWidth:0}}>
+    {tab==="derives"&&kpiTab==="synthese"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <KpiRow items={[[fd.length,"Total",T.teal500],[shipped.length,"Expédiées",T.emerald500],[inProd.length,"En production",T.amber500],[upcoming.length,"Départs < 30j",T.red500],[avgDureeProd==null?"—":avgDureeProd+"j","Durée moy. production",T.violet500]]}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:14}}>
+        {countByEtat.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Répartition par état</div>
           <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Volumétrie actuelle du portefeuille</div>
           <ResponsiveContainer width="100%" height={Math.max(160,countByEtat.length*40)}>
             <BarChart data={countByEtat} layout="vertical" margin={{left:10,right:20}}>
@@ -378,8 +369,8 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           </ResponsiveContainer>
         </div>}
 
-        {countByPays.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Répartition par pays</div>
+        {countByPays.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Répartition par pays</div>
           <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Destinations des machines du portefeuille</div>
           <ResponsiveContainer width="100%" height={Math.max(160,countByPays.length*36)}>
             <BarChart data={countByPays} layout="vertical" margin={{left:10,right:20}}>
@@ -392,10 +383,53 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           </ResponsiveContainer>
         </div>}
 
-        {fd.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd,gridColumn:"1 / -1"}}>
+        <div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:10}}>
+            <div>
+              <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900}}>Explorateur libre</div>
+              <div style={{fontSize:13,color:T.ink300}}>Choisissez ce que vous voulez analyser</div>
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <div style={{width:170}}><Select compact value={exploreDim} onChange={e=>setExploreDim(e.target.value)} options={[{value:"gamme",label:"Par gamme"},{value:"etat",label:"Par état"},{value:"pays",label:"Par pays"},{value:"chef",label:"Par chef de projet"},{value:"moisDepart",label:"Par mois de départ"}]}/></div>
+              <div style={{width:200}}><Select compact value={exploreMetric} onChange={e=>setExploreMetric(e.target.value)} options={[{value:"count",label:"Nombre de PJ"},{value:"drift",label:"Dérive moyenne départ"},{value:"duree",label:"Durée moyenne production"}]}/></div>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={Math.max(180,exploreData.length*36)}>
+            <BarChart data={exploreData} layout="vertical" margin={{left:10,right:20}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
+              <XAxis type="number" tick={{fontSize:12,fill:T.ink500}}/>
+              <YAxis type="category" dataKey="key" width={100} tick={{fontSize:13,fill:T.ink700,fontWeight:600}}/>
+              <Tooltip formatter={(v,n,p)=>[v,exploreMetricInfo[exploreMetric].label]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
+              <Bar dataKey={exploreMetric} radius={[0,6,6,0]} fill={T.violet500}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+      <div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:10}}>Départs par mois</div>
+        <div style={{display:"flex",gap:4,alignItems:"flex-end",height:84}}>
+          {byMonth.map((n,i)=>{const iC=i===today.getMonth();return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+            <div style={{fontSize:14,color:T.ink500,fontWeight:600}}>{n||""}</div>
+            <div style={{width:"100%",height:n?(n/maxBar*60)+"px":"0",minHeight:n?4:0,background:i<today.getMonth()?T.ink100:iC?T.teal500:T.teal400,borderRadius:"3px 3px 0 0"}}/>
+            <div style={{fontSize:13,color:iC?T.teal600:T.ink300,fontWeight:iC?700:500}}>{MONTHS[i]}</div>
+          </div>);})}
+        </div>
+      </div>
+      <div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+        <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:10}}>Par gamme</div>
+        {Object.entries(gammeCounts).sort((a,b)=>b[1]-a[1]).map(([g,n])=>{const col=GAMME_COLORS[g]||T.ink500;return(<div key={g} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <span style={{width:78,fontSize:15,fontWeight:700,color:col,flexShrink:0}}>{g}</span>
+          <div style={{flex:1,background:T.surfaceAlt,borderRadius:5,height:18,overflow:"hidden",position:"relative"}}><div style={{width:((n/Math.max(fd.length,1))*100)+"%",height:"100%",background:col}}/><span style={{position:"absolute",left:8,top:1,fontSize:14,color:"#fff",fontWeight:700,lineHeight:"16px"}}>{n}</span></div>
+        </div>);})}
+      </div>
+      </div>
+    </div>}
+
+    {tab==="derives"&&kpiTab==="charge"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {fd.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line,gridColumn:"1 / -1"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
             <div>
-              <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Charge prévisionnelle par étape et par mois</div>
+              <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Charge prévisionnelle par étape et par mois</div>
               <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Nombre de machines à chaque étape chaque mois — Production = machines en fabrication ce mois-là</div>
             </div>
             <PeriodFilter yearsAvailable={yearsInData} year={chargeYear} setYear={setChargeYear} showMonth={false}/>
@@ -416,18 +450,11 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           </ResponsiveContainer>:<div style={{padding:"40px 0",textAlign:"center",color:T.ink300,fontSize:14}}>Aucune donnée pour cette période</div>}
         </div>}
 
-        {workloadByPJ.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd,gridColumn:"1 / -1"}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:600,fontSize:17,color:T.ink900,marginBottom:4,display:"flex",alignItems:"center",gap:8}}><NavIcon name="gauge" size={17}/>Charge de travail Atelier / Autom</div>
+        {workloadByPJ.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line,gridColumn:"1 / -1"}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4,display:"flex",alignItems:"center",gap:8}}><NavIcon name="gauge" size={17}/>Charge de travail Atelier / Autom</div>
           <div style={{fontSize:13,color:T.ink300,marginBottom:14}}>Heures de travail par PJ, issues de l'import Excel (feuille Table_affectation)</div>
 
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:16,marginBottom:16}}>
-            {[[totalHeuresAtelier+"h","Total Atelier",T.teal500],[totalHeuresAutom+"h","Total Autom",T.violet500],[workloadByPJ.length,"PJ avec charge connue",T.ink500]].map(([v,l,c])=>(
-              <div key={l} style={{background:T.surface,borderRadius:10,padding:"12px 16px",borderTop:"3px solid "+c}}>
-                <div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:T.ink900}}>{v}</div>
-                <div style={{fontSize:13,color:T.ink500,marginTop:2}}>{l}</div>
-              </div>
-            ))}
-          </div>
+          <KpiRow items={[[totalHeuresAtelier+"h","Total Atelier",T.teal500],[totalHeuresAutom+"h","Total Autom",T.violet500],[workloadByPJ.length,"PJ avec charge connue",T.ink500]]} min={150}/>
 
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18}}>
             <div style={{background:T.surface,borderRadius:10,padding:14,overflow:"auto",maxHeight:380}}>
@@ -492,54 +519,18 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
             </>}
           </div>
         </div>}
+      {fd.length===0&&<EmptyNote>Aucune donnée pour la sélection.</EmptyNote>}
+    </div>}
 
-        <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:10}}>
-            <div>
-              <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900}}>Explorateur libre</div>
-              <div style={{fontSize:13,color:T.ink300}}>Choisissez ce que vous voulez analyser</div>
-            </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <select value={exploreDim} onChange={e=>setExploreDim(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,color:T.ink700,background:T.surface}}>
-                <option value="gamme">Par gamme</option>
-                <option value="etat">Par état</option>
-                <option value="pays">Par pays</option>
-                <option value="chef">Par chef de projet</option>
-                <option value="moisDepart">Par mois de départ</option>
-              </select>
-              <select value={exploreMetric} onChange={e=>setExploreMetric(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:13,fontFamily:T.font,color:T.ink700,background:T.surface}}>
-                <option value="count">Nombre de PJ</option>
-                <option value="drift">Dérive moyenne départ</option>
-                <option value="duree">Durée moyenne production</option>
-              </select>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={Math.max(180,exploreData.length*36)}>
-            <BarChart data={exploreData} layout="vertical" margin={{left:10,right:20}}>
-              <CartesianGrid strokeDasharray="3 3" stroke={T.surface}/>
-              <XAxis type="number" tick={{fontSize:12,fill:T.ink500}}/>
-              <YAxis type="category" dataKey="key" width={100} tick={{fontSize:13,fill:T.ink700,fontWeight:600}}/>
-              <Tooltip formatter={(v,n,p)=>[v,exploreMetricInfo[exploreMetric].label]} contentStyle={{fontFamily:T.font,fontSize:13,borderRadius:8}}/>
-              <Bar dataKey={exploreMetric} radius={[0,6,6,0]} fill={T.violet500}/>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
+    {tab==="derives"&&kpiTab==="derives"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {!hasInitial&&<div style={{background:T.amber100,color:T.amber600,borderRadius:12,padding:"16px 18px",fontSize:14,display:"flex",alignItems:"center",gap:10}}><NavIcon name="warning" size={16}/>Aucun planning initial importé — les dérives ne peuvent pas être calculées. Utilisez le menu ⋯ de la tuile « Planning initial » en haut à droite.</div>}
       {initialData.length>0&&<>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:16}}>
-          {[[avgDelay==null?"—":(avgDelay>0?"+":"")+avgDelay+"j","Retard moyen départ",avgDelay>0?T.red500:T.emerald500],[lateCount,"PJ en retard",T.red500],[onTimeOrEarlyCount,"PJ à l'heure / en avance",T.emerald500],[onTimeRate==null?"—":onTimeRate+"%","Taux de respect délais",onTimeRate>=70?T.emerald500:onTimeRate>=40?T.amber500:T.red500],[comparable.length,"PJ comparables",T.ink500]].map(([v,l,c])=>(
-            <div key={l} style={{background:T.card,borderRadius:12,padding:"18px 20px",borderTop:"3px solid "+c,boxShadow:T.shadowMd}}>
-              <div style={{fontFamily:T.fontDisplay,fontSize:30,fontWeight:700,color:T.ink900}}>{v}</div>
-              <div style={{fontSize:15,fontWeight:600,color:T.ink500,marginTop:3}}>{l}</div>
-            </div>
-          ))}
-        </div>
+          <KpiRow items={[[avgDelay==null?"—":(avgDelay>0?"+":"")+avgDelay+"j","Retard moyen départ",avgDelay>0?T.red500:T.emerald500],[lateCount,"PJ en retard",T.red500],[onTimeOrEarlyCount,"PJ à l'heure / en avance",T.emerald500],[onTimeRate==null?"—":onTimeRate+"%","Taux de respect délais",onTimeRate>=70?T.emerald500:onTimeRate>=40?T.amber500:T.red500],[comparable.length,"PJ comparables",T.ink500]]}/>
 
-        <div style={{background:T.card,borderRadius:14,padding:"18px 20px",boxShadow:T.shadowMd,border:"1px solid "+T.line}}>
+        <div style={{background:T.card,borderRadius:14,padding:"18px 20px",border:"1px solid "+T.line}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:2}}>
             <div>
-              <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:22,color:T.ink900,display:"flex",alignItems:"center",gap:9}}><NavIcon name="chart" size={19}/>Vue CODIR — Promesse vs Réalité</div>
+              <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:17,color:T.ink900,display:"flex",alignItems:"center",gap:9}}><NavIcon name="chart" size={19}/>Vue CODIR — Promesse vs Réalité</div>
               <div style={{fontSize:14,color:T.ink500}}>Impact cumulé de l'écart entre le planning initial et le planning révisé</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,background:T.surface,borderRadius:10,padding:"6px 10px"}}>
@@ -550,14 +541,7 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
             </div>
           </div>
           <div style={{marginBottom:16}}/>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:16,marginBottom:18}}>
-            {[[totalDelayDays+"j","Retard cumulé généré ("+STEP_LABELS[kpiStep]+")",T.red500],[totalGainDays+"j","Avance cumulée gagnée",T.emerald500],[reliabilityRate==null?"—":reliabilityRate+"%","PJ tenus à la date promise",T.teal500],[dureeCompare.ecart==null?"—":(dureeCompare.ecart>0?"+":"")+dureeCompare.ecart+"j","Écart durée moy. production",dureeCompare.ecart>0?T.red500:T.emerald500]].map(([v,l,c])=>(
-              <div key={l} style={{background:T.surface,borderRadius:10,padding:"12px 16px",borderTop:"3px solid "+c}}>
-                <div style={{fontFamily:T.fontDisplay,fontSize:28,fontWeight:700,color:T.ink900}}>{v}</div>
-                <div style={{fontSize:13,color:T.ink500,marginTop:2}}>{l}</div>
-              </div>
-            ))}
-          </div>
+          <KpiRow items={[[totalDelayDays+"j","Retard cumulé généré ("+STEP_LABELS[kpiStep]+")",T.red500],[totalGainDays+"j","Avance cumulée gagnée",T.emerald500],[reliabilityRate==null?"—":reliabilityRate+"%","PJ tenus à la date promise",T.teal500],[dureeCompare.ecart==null?"—":(dureeCompare.ecart>0?"+":"")+dureeCompare.ecart+"j","Écart durée moy. production",dureeCompare.ecart>0?T.red500:T.emerald500]]} min={170}/>
 
           {promiseVsReality.length>0&&<div style={{background:T.surface,borderRadius:10,padding:14,marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:700,color:T.ink900,marginBottom:8}}>{STEP_LABELS[kpiStep]} promis (initial) vs maintenus dans le mois (révisé)</div>
@@ -674,8 +658,8 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(380px,1fr))",gap:18}}>
-          {driftByGamme.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-            <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Dérive moyenne par gamme</div>
+          {driftByGamme.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+            <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Dérive moyenne par gamme</div>
             <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Écart moyen (jours) entre départ initial et révisé, par gamme</div>
             <ResponsiveContainer width="100%" height={Math.max(180,driftByGamme.length*38)}>
               <BarChart data={driftByGamme} layout="vertical" margin={{left:10,right:20}}>
@@ -690,8 +674,8 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
             </ResponsiveContainer>
           </div>}
 
-          {driftByMilestone.some(d=>d.moyenne!=null)&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-            <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Dérive moyenne par jalon</div>
+          {driftByMilestone.some(d=>d.moyenne!=null)&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
+            <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Dérive moyenne par jalon</div>
             <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Où le retard se creuse le plus dans la chaîne de production</div>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={driftByMilestone}>
@@ -706,16 +690,13 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
             </ResponsiveContainer>
           </div>}
 
-          {comparable.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
+          {comparable.length>0&&<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
               <div>
-                <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Dérive moyenne par mois de départ</div>
+                <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Dérive moyenne par mois de départ</div>
                 <div style={{fontSize:13,color:T.ink300,marginBottom:10}}>Périodes où les retards sont les plus fréquents — la situation s'améliore-t-elle dans le temps ?</div>
               </div>
-              <select value={driftMoisYear||""} onChange={e=>setDriftMoisYear(e.target.value?+e.target.value:null)} style={{padding:"4px 8px",borderRadius:7,border:"1px solid "+T.line,fontSize:12,fontFamily:T.font,color:T.ink700,background:T.card,height:30}}>
-                <option value="">Toutes années</option>
-                {yearsInData.map(y=><option key={y} value={y}>{y}</option>)}
-              </select>
+              <div style={{width:128}}><Select compact value={driftMoisYear||""} onChange={e=>setDriftMoisYear(e.target.value?+e.target.value:null)} options={[{value:"",label:"Toutes années"},...yearsInData.map(y=>({value:y,label:String(y)}))]}/></div>
             </div>
             {driftTrend.length>0?<ResponsiveContainer width="100%" height={220}>
               <LineChart data={driftTrend}>
@@ -730,8 +711,8 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
 
         </div>
 
-        {worstDrifts.length>0&&<div style={{background:T.card,borderRadius:12,padding:14,boxShadow:T.shadowMd,maxWidth:520}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:16,color:T.ink900,marginBottom:8}}>Top 5 dérives — {STEP_LABELS[kpiStep]} (vs planning initial)</div>
+        {worstDrifts.length>0&&<div style={{background:T.card,borderRadius:12,padding:14,border:"1px solid "+T.line,maxWidth:520}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:8}}>Top 5 dérives — {STEP_LABELS[kpiStep]} (vs planning initial)</div>
           {worstDrifts.map(r=>{const d=r[kpiStep].delta;const c=d>0?T.red500:d<0?T.emerald500:T.ink500;return(
             <div key={r.pj} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid "+T.surface}}>
               <span style={{fontWeight:700,color:T.teal600,fontSize:14,minWidth:85}}>{r.pj}</span>
@@ -742,8 +723,8 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           );})}
         </div>}
 
-        <div style={{background:T.card,borderRadius:12,padding:0,boxShadow:T.shadowMd,overflow:"auto"}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:19,color:T.ink900,padding:"16px 16px 0"}}>Détail par PJ — Initial vs Révisé</div>
+        <div style={{background:T.card,borderRadius:12,padding:0,border:"1px solid "+T.line,overflow:"auto"}}>
+          <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,padding:"16px 16px 0"}}>Détail par PJ — Initial vs Révisé</div>
           <table style={{width:"100%",borderCollapse:"collapse",marginTop:10,tableLayout:"auto"}}>
             <thead><tr style={{background:T.surface,borderBottom:"2px solid "+T.line}}>
               {["N° PJ","Gamme","Arrivée","Δ","Tests","Δ","Fin prod","Δ","Départ","Δ"].map((h,i)=><th key={i} style={{padding:"9px 12px",textAlign:"left",fontWeight:700,color:T.ink500,fontSize:14,whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:".03em"}}>{h}</th>)}
@@ -761,278 +742,25 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           </table>
         </div>
       </>}
-
-      <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-        <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:19,color:T.ink900,marginBottom:10}}>Départs par mois</div>
-        <div style={{display:"flex",gap:4,alignItems:"flex-end",height:84}}>
-          {byMonth.map((n,i)=>{const iC=i===today.getMonth();return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-            <div style={{fontSize:14,color:T.ink500,fontWeight:600}}>{n||""}</div>
-            <div style={{width:"100%",height:n?(n/maxBar*60)+"px":"0",minHeight:n?4:0,background:i<today.getMonth()?T.ink100:iC?T.teal500:T.teal400,borderRadius:"3px 3px 0 0"}}/>
-            <div style={{fontSize:13,color:iC?T.teal600:T.ink300,fontWeight:iC?700:500}}>{MONTHS[i]}</div>
-          </div>);})}
-        </div>
-      </div>
-      <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-        <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:19,color:T.ink900,marginBottom:10}}>Par gamme</div>
-        {Object.entries(gammeCounts).sort((a,b)=>b[1]-a[1]).map(([g,n])=>{const col=GAMME_COLORS[g]||T.ink500;return(<div key={g} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <span style={{width:78,fontSize:15,fontWeight:700,color:col,flexShrink:0}}>{g}</span>
-          <div style={{flex:1,background:T.surfaceAlt,borderRadius:5,height:18,overflow:"hidden",position:"relative"}}><div style={{width:((n/Math.max(fd.length,1))*100)+"%",height:"100%",background:col}}/><span style={{position:"absolute",left:8,top:1,fontSize:14,color:"#fff",fontWeight:700,lineHeight:"16px"}}>{n}</span></div>
-        </div>);})}
-      </div>
-    </div>}
-    {tab==="avancement"&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
-        <span style={{fontSize:16,color:T.ink500}}>Cliquer sur la barre ou saisir le %</span>
-        <button onClick={saveProgress} disabled={savingProgress} style={{marginLeft:"auto",padding:"9px 18px",borderRadius:10,border:"none",background:progressSaved?T.emerald500:T.teal500,color:"#fff",fontSize:15,fontWeight:700,cursor:savingProgress?"default":"pointer",opacity:savingProgress?0.7:1,display:"flex",alignItems:"center",gap:7}}>
-          {progressSaved?"✓ Enregistré":savingProgress?"Enregistrement...":"Valider l'avancement"}
-        </button>
-      </div>
-      <div style={{fontSize:13,color:T.amber600,background:T.amber100,padding:"8px 12px",borderRadius:8,marginBottom:14}}>
-        <span style={{display:"inline-flex",alignItems:"center",gap:7}}><NavIcon name="warning" size={14}/>Les modifications restent temporaires jusqu'au clic sur « Valider » — sans validation, elles seront perdues si la page est actualisée.</span>
-      </div>
-      <div style={{fontSize:13,color:T.ink500,background:T.surface,padding:"8px 12px",borderRadius:8,marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
-        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:16,height:16,borderRadius:"50%",background:T.ink300,color:"#fff",fontSize:11,fontWeight:700,fontStyle:"italic",flexShrink:0}}>i</span>
-        Cet avancement (%) reflète uniquement la production chez ENOGIA — il ne prend pas en compte l'avancement chez les fournisseurs.
-      </div>
-      {fd.map(r=>{
-        const pv=progress[r.pj]!=null?progress[r.pj]:r.etat==="SHIPPED"?100:0;
-        return(<div key={r.pj} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid "+T.surface}}>
-          <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:110,flexShrink:0}}>{r.pj}</span>
-          <span style={{color:T.ink300,fontSize:14,minWidth:60,flexShrink:0}}>{r.gamme}</span>
-          <div style={{flex:1,background:T.surfaceAlt,borderRadius:9,height:13,overflow:"hidden",cursor:"pointer"}} onClick={e=>{const rect=e.currentTarget.getBoundingClientRect();const nv=Math.max(0,Math.min(100,Math.round(((e.clientX-rect.left)/rect.width)*100)));setProgress(p=>({...p,[r.pj]:nv}));}}>
-            <div style={{width:pv+"%",height:"100%",background:pv>=100?T.emerald500:pv>=50?T.teal500:T.amber500,borderRadius:9}}/>
-          </div>
-          <input type="number" min={0} max={100} value={pv} onChange={e=>setProgress(p=>({...p,[r.pj]:Math.max(0,Math.min(100,+e.target.value||0))}))} style={{width:54,padding:"5px 6px",borderRadius:7,border:"1px solid "+T.line,fontSize:16,fontWeight:700,textAlign:"center",fontFamily:T.font}}/>
-          <span style={{fontSize:15,color:T.ink500,fontWeight:500}}>%</span>
-        </div>);
-      })}
-      <div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}>
-        <button onClick={saveProgress} disabled={savingProgress} style={{padding:"9px 18px",borderRadius:10,border:"none",background:progressSaved?T.emerald500:T.teal500,color:"#fff",fontSize:15,fontWeight:700,cursor:savingProgress?"default":"pointer",opacity:savingProgress?0.7:1}}>
-          {progressSaved?"✓ Enregistré":savingProgress?"Enregistrement...":"Valider l'avancement"}
-        </button>
-      </div>
-    </div>}
-    {tab==="statut"&&<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{fontSize:16,color:T.ink500,marginBottom:16}}>
-        Choisissez l'état de chaque machine. Il n'y a pas de calcul automatique — l'état affiché partout sur le site est exactement celui sélectionné ici, et le changement est immédiatement visible par tous les utilisateurs.
-      </div>
-      {data.map(r=>{
-        const current=etatChoice[r.pj]||"A_DEFINIR";
-        const presence=clientPresence[r.pj]||{present:false,date:""};
-        return(<div key={r.pj} style={{padding:"11px 0",borderBottom:"1px solid "+T.surface}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <span style={{fontWeight:700,color:T.teal600,fontSize:16,minWidth:110,flexShrink:0}}>{r.pj}</span>
-            <span style={{color:T.ink300,fontSize:14,minWidth:60,flexShrink:0}}>{r.gamme}</span>
-            <Badge etat={current}/>
-            <div style={{display:"flex",gap:6,marginLeft:"auto",flexWrap:"wrap"}}>
-              {ASSIGNABLE_ETATS.map(e=>{const m=ETAT_META[e];const active=current===e;return(
-                <button key={e} onClick={()=>setEtatFor(r.pj,e)} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid "+(active?m.bar:T.line),background:active?m.bar:T.card,color:active?"#fff":T.ink700,fontSize:13,fontWeight:600,cursor:"pointer"}}>{m.label}</button>
-              );})}
-            </div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginTop:10,paddingLeft:122,flexWrap:"wrap"}}>
-            <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-              <div onClick={()=>setClientPresenceFor(r.pj,{...presence,present:!presence.present})} style={{width:46,height:26,borderRadius:13,background:presence.present?T.teal500:T.surfaceAlt,position:"relative",transition:"background .15s"}}>
-                <div style={{width:21,height:21,borderRadius:"50%",background:"#fff",position:"absolute",top:2.5,left:presence.present?23:2.5,transition:"left .15s",boxShadow:T.shadowSm}}/>
-              </div>
-              <span style={{fontSize:15,color:T.ink700,fontWeight:700,display:"inline-flex",alignItems:"center",gap:6}}><PersonIcon size={15} color={T.ink700}/> Présence client / NOBO aux tests</span>
-            </label>
-            {presence.present&&(()=>{
-              const minD=r.tests?toLocalISO(new Date(r.tests)):null;
-              const maxD=r.testsFin?toLocalISO(new Date(r.testsFin)):minD;
-              const noTestsDates=!minD;
-              return(<>
-                <input type="date" value={presence.date||""} min={minD||undefined} max={maxD||undefined} disabled={noTestsDates}
-                  onChange={e=>{
-                    const v=e.target.value;
-                    if(!v){setClientPresenceFor(r.pj,{...presence,date:""});return;}
-                    if(minD&&v<minD){setClientPresenceFor(r.pj,{...presence,date:minD});return;}
-                    if(maxD&&v>maxD){setClientPresenceFor(r.pj,{...presence,date:maxD});return;}
-                    setClientPresenceFor(r.pj,{...presence,date:v});
-                  }}
-                  style={{padding:"7px 11px",borderRadius:8,border:"1.5px solid "+T.teal500,fontSize:14,fontFamily:T.font,color:T.ink700,fontWeight:600,opacity:noTestsDates?0.5:1}}/>
-                {noTestsDates&&<span style={{fontSize:13,color:T.red500,fontWeight:600}}>Période de Tests non définie pour ce PJ — date impossible à saisir</span>}
-                {!noTestsDates&&<span style={{fontSize:12,color:T.ink300}}>Doit être comprise entre {fmt(new Date(r.tests))} et {fmt(new Date(maxD))}</span>}
-              </>);
-            })()}
-          </div>
-        </div>);
-      })}
     </div>}
 
-    {tab==="fiche"&&<ProjectFileManager data={data} initialData={initialData} comments={comments} delays={delays}/>}
-    {tab==="retards"&&<DelaysManager data={data} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypes} addDelayAllocationMulti={addDelayAllocationMulti} authorName={authorName}/>}
-    {tab==="acces"&&<ManagerAccessManager managerEmails={managerEmails} setManagerEmails={setManagerEmails} currentUserEmail={currentUserEmail}/>}
-    {tab==="vacances"&&<ClosurePeriodsManager closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriods}/>}
-    {tab==="production"&&<ProductionCalendarManager data={data} productionExclusions={productionExclusions} toggleProductionExclusion={toggleProductionExclusion}/>}
-      </div>
-    </div>
-  </div>);
-}
+    {tab==="derives"&&kpiTab==="avancement"&&<KpiAvancement rows={fd} progress={progress}/>}
+    {tab==="derives"&&kpiTab==="retards"&&<DelayInsights delays={delays} delayTypes={delayTypes}/>}
 
-// ── Vue globale des causes de retard : répartition par type, top PJ contributeurs, gestion des types ──
-const DELAY_COLORS=[T.red500,T.amber500,T.violet500,T.teal500,"#e8821a",T.emerald500,T.navy600,T.ink500];
-function DelaysManager({data,delays,delayTypes,setDelayTypes,addDelayAllocationMulti,authorName}){
-  const [newType,setNewType]=useState("");
-  const [multiMode,setMultiMode]=useState(false);
-  const [selPj,setSelPj]=useState("");
-  const [selPjs,setSelPjs]=useState(new Set());
-  const [allocType,setAllocType]=useState(delayTypes[0]||"");
-  const [allocDays,setAllocDays]=useState("");
-  const [allocNote,setAllocNote]=useState("");
-  const [allocAuthorInput,setAllocAuthorInput]=useState("");
-  const allocAuthor=authorName||allocAuthorInput;
-  const [allocErr,setAllocErr]=useState("");
-
-  const submitAlloc=async ()=>{
-    if(!allocAuthor.trim()){setAllocErr("Le nom est obligatoire.");return;}
-    if(!allocType){setAllocErr("Choisissez un type de retard.");return;}
-    const n=Number(allocDays);
-    if(!allocDays||isNaN(n)||n<=0){setAllocErr("Indiquez un nombre de jours valide.");return;}
-    const pjList=multiMode?[...selPjs]:(selPj?[selPj]:[]);
-    if(pjList.length===0){setAllocErr("Sélectionnez au moins un PJ.");return;}
-    setAllocErr("");
-    const ok=await addDelayAllocationMulti(pjList,allocType,n,allocNote,allocAuthor);
-    if(ok){setAllocDays("");setAllocNote("");}
-  };
-
-  const allEntries=useMemo(()=>{
-    const out=[];
-    Object.entries(delays||{}).forEach(([pj,list])=>(list||[]).forEach(d=>out.push({...d,pj})));
-    return out;
-  },[delays]);
-
-  const byType=useMemo(()=>{
-    const m={};
-    allEntries.forEach(e=>{m[e.type]=(m[e.type]||0)+(e.days||0);});
-    return Object.entries(m).map(([type,days],i)=>({type,days,c:DELAY_COLORS[i%DELAY_COLORS.length]})).sort((a,b)=>b.days-a.days);
-  },[allEntries]);
-
-  const byPj=useMemo(()=>{
-    const m={};
-    allEntries.forEach(e=>{m[e.pj]=(m[e.pj]||0)+(e.days||0);});
-    return Object.entries(m).map(([pj,days])=>({pj,days})).sort((a,b)=>b.days-a.days).slice(0,10);
-  },[allEntries]);
-
-  const totalDays=allEntries.reduce((a,e)=>a+(e.days||0),0);
-  const maxTypeDays=Math.max(...byType.map(t=>t.days),1);
-  const maxPjDays=Math.max(...byPj.map(t=>t.days),1);
-
-  const addType=()=>{
-    const v=newType.trim();
-    if(!v||delayTypes.includes(v))return;
-    setDelayTypes([...delayTypes,v]);
-    setNewType("");
-  };
-  const removeType=t=>{
-    if(delayTypes.length<=1)return;
-    setDelayTypes(delayTypes.filter(x=>x!==t));
-  };
-
-  return(<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:16}}>
-      {[[totalDays+"j","Total jours de retard alloués",T.red500],[allEntries.length,"Allocations enregistrées",T.teal500],[byType.length,"Types de retard utilisés",T.violet500]].map(([v,l,c])=>(
-        <div key={l} style={{background:T.card,borderRadius:12,padding:"18px 20px",borderTop:"3px solid "+c,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,fontSize:26,fontWeight:700,color:T.ink900}}>{v}</div>
-          <div style={{fontSize:14,color:T.ink500,fontWeight:600,marginTop:3}}>{l}</div>
-        </div>
-      ))}
-    </div>
-
-    <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:12}}>
-        <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900}}>⏱️ Allouer une cause de retard</div>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:T.ink500,fontWeight:600,cursor:"pointer"}}>
-          <input type="checkbox" checked={multiMode} onChange={e=>{setMultiMode(e.target.checked);setAllocErr("");}}/> Allouer à plusieurs PJ (décalage groupé)
-        </label>
-      </div>
-      {multiMode&&<div style={{marginBottom:12}}>
-        <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:6}}>PJ concernés</label>
-        <PjChecklist data={data} selected={selPjs} onChange={setSelPjs} maxHeight={200}/>
+    {tab==="avancement"&&<AvancementTab rows={fd} progress={progress} setProgress={setProgress} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}/>}
+    {tab==="statut"&&<StatutTab rows={fd} etatChoice={etatChoice} setEtatFor={setEtatFor} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}/>}
+    {tab==="fiche"&&<ProjectFileManager data={data} initialData={initialData} comments={comments} delays={delays} progress={progress}/>}
+    {tab==="retards"&&<DelaysTab data={data} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypes} addDelayAllocationMulti={addDelayAllocationMulti} deleteDelayAllocation={deleteDelayAllocation} authorName={authorName}/>}
+    {tab==="acces"&&<>
+      <ManagerAccessManager managerEmails={managerEmails} setManagerEmails={setManagerEmails} currentUserEmail={currentUserEmail}/>
+      {/* Nom du build : réservé au propriétaire (demandé : « uniquement visible par moi, dans l'onglet manager »). */}
+      {buildVersion&&<div style={{...CARD,padding:"10px 14px",marginTop:14,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:12,fontWeight:700,color:T.ink500,textTransform:"uppercase",letterSpacing:".04em"}}>Version du site</span>
+        <span style={{fontFamily:"monospace",fontSize:12.5,fontWeight:600,color:T.ink700,background:T.ink100,borderRadius:7,padding:"3px 10px"}}>build {buildVersion}</span>
       </div>}
-      <div style={{display:"grid",gridTemplateColumns:multiMode?"repeat(auto-fit,minmax(150px,1fr))":"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:10}}>
-        {!multiMode&&<div>
-          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>PJ concerné</label>
-          <select value={selPj} onChange={e=>setSelPj(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,background:T.card,width:"100%"}}>
-            <option value="">— Choisir un PJ —</option>
-            {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
-          </select>
-        </div>}
-        <div>
-          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>Type de retard</label>
-          <select value={allocType} onChange={e=>setAllocType(e.target.value)} style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,background:T.card,width:"100%"}}>
-            {delayTypes.map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>Jours</label>
-          <input type="number" min="1" value={allocDays} onChange={e=>{setAllocDays(e.target.value);setAllocErr("");}} placeholder="Jours" style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,width:"100%",boxSizing:"border-box"}}/>
-        </div>
-        <div>
-          <label style={{fontSize:13,color:T.ink500,fontWeight:600,display:"block",marginBottom:5}}>Votre nom</label>
-          {authorName?
-            <div style={{padding:"8px 10px",fontSize:14,color:T.ink700,fontWeight:600}}>{authorName}</div>
-          :<input type="text" value={allocAuthorInput} onChange={e=>{setAllocAuthorInput(e.target.value);setAllocErr("");}} placeholder="Votre nom" maxLength={40} style={{padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,width:"100%",boxSizing:"border-box"}}/>}
-        </div>
-      </div>
-      <div style={{display:"flex",gap:8}}>
-        <input type="text" value={allocNote} onChange={e=>setAllocNote(e.target.value)} placeholder="Note (optionnel)" maxLength={300} style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
-        <button onClick={submitAlloc} style={{padding:"8px 18px",borderRadius:8,border:"none",background:T.teal500,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Allouer</button>
-      </div>
-      {allocErr&&<div style={{fontSize:13,color:T.red500,marginTop:8}}>{allocErr}</div>}
-    </div>
-
-    <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Répartition globale par cause de retard</div>
-      <div style={{fontSize:13,color:T.ink300,marginBottom:12}}>Qu'est-ce qui génère le plus de retard sur l'ensemble du portefeuille ?</div>
-      {byType.length===0?<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"20px 0"}}>Aucune allocation de retard enregistrée pour l'instant.</div>:
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {byType.map(t=>(
-            <div key={t.type}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:4}}>
-                <span style={{fontWeight:600,color:T.ink700}}>{t.type}</span>
-                <span style={{fontWeight:700,color:T.ink900}}>{t.days}j · {Math.round(t.days/totalDays*100)}%</span>
-              </div>
-              <div style={{background:T.surfaceAlt,borderRadius:6,height:12,overflow:"hidden"}}>
-                <div style={{width:(t.days/maxTypeDays*100)+"%",height:"100%",background:t.c,borderRadius:6}}/>
-              </div>
-            </div>
-          ))}
-        </div>}
-    </div>
-
-    <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Top PJ — jours de retard cumulés</div>
-      <div style={{fontSize:13,color:T.ink300,marginBottom:12}}>Les projets qui concentrent le plus de retard, toutes causes confondues</div>
-      {byPj.length===0?<div style={{color:T.ink300,fontSize:15,textAlign:"center",padding:"20px 0"}}>Aucune donnée.</div>:
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {byPj.map(p=>(
-            <div key={p.pj} style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{width:90,fontWeight:700,color:T.teal600,fontSize:14,flexShrink:0}}>{p.pj}</span>
-              <div style={{flex:1,background:T.surfaceAlt,borderRadius:6,height:12,overflow:"hidden"}}>
-                <div style={{width:(p.days/maxPjDays*100)+"%",height:"100%",background:T.red500,borderRadius:6}}/>
-              </div>
-              <span style={{width:36,textAlign:"right",fontWeight:700,color:T.ink900,fontSize:14,flexShrink:0}}>{p.days}j</span>
-            </div>
-          ))}
-        </div>}
-    </div>
-
-    <div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd}}>
-      <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:10}}>Types de retard génériques</div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
-        {delayTypes.map(t=>(
-          <span key={t} style={{display:"flex",alignItems:"center",gap:6,background:T.surface,borderRadius:8,padding:"6px 10px 6px 12px",fontSize:14,color:T.ink700,fontWeight:600}}>
-            {t}
-            <button onClick={()=>removeType(t)} disabled={delayTypes.length<=1} title="Supprimer ce type" style={{background:"none",border:"none",color:delayTypes.length<=1?T.ink100:T.ink300,cursor:delayTypes.length<=1?"default":"pointer",fontSize:14,padding:0}}>✕</button>
-          </span>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:8}}>
-        <input type="text" value={newType} onChange={e=>setNewType(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addType();}} placeholder="Nouveau type de retard..." maxLength={60}
-          style={{flex:1,padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700}}/>
-        <button onClick={addType} disabled={!newType.trim()} style={{padding:"8px 16px",borderRadius:8,border:"none",background:newType.trim()?T.teal500:T.surfaceAlt,color:newType.trim()?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:newType.trim()?"pointer":"default"}}>Ajouter</button>
-      </div>
+    </>}
+    {tab==="vacances"&&<ClosurePeriodsManager closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriods}/>}
+    {tab==="production"&&<ProductionCalendarManager data={data} productionExclusions={productionExclusions} setProductionExclusionDays={setProductionExclusionDays}/>}
     </div>
   </div>);
 }
@@ -1056,8 +784,8 @@ function ManagerAccessManager({managerEmails,setManagerEmails,currentUserEmail})
   };
 
   return(<div style={{display:"flex",flexDirection:"column",gap:14}}>
-    <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
-      <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:17,color:T.ink900,marginBottom:4}}>Accès automatique à l'espace Manager</div>
+    <div style={{background:T.card,borderRadius:12,padding:18,border:"1px solid "+T.line}}>
+      <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4}}>Accès automatique à l'espace Manager</div>
       <div style={{fontSize:13.5,color:T.ink500,marginBottom:14,lineHeight:1.5}}>
         Les comptes Google listés ci-dessous entrent directement dans l'espace Manager après connexion, sans avoir besoin du code PIN. Le code PIN reste utilisable en secours pour tout le monde.
       </div>
@@ -1086,128 +814,6 @@ function ManagerAccessManager({managerEmails,setManagerEmails,currentUserEmail})
   </div>);
 }
 
-// ── Fiche projet complète (Manager) : dates, historique commentaires (y compris privés), causes de retard, infos ──
-function ProjectFileManager({data,initialData,comments,delays}){
-  const [search,setSearch]=useState("");
-  const [selPj,setSelPj]=useState(data[0]?.pj||null);
-  const initialByPj=useMemo(()=>{const m={};(initialData||[]).forEach(r=>{m[r.pj]=r;});return m;},[initialData]);
-  const filteredList=useMemo(()=>{
-    const q=search.trim().toLowerCase();
-    if(!q)return data;
-    return data.filter(r=>{
-      const meta=getPjMeta(r.pj,r);
-      return r.pj.toLowerCase().includes(q)||(meta.nomProjet||"").toLowerCase().includes(q)||(meta.pays||"").toLowerCase().includes(q)||(meta.chefProjet||"").toLowerCase().includes(q);
-    });
-  },[data,search]);
-  const r=data.find(x=>x.pj===selPj);
-  const meta=r?getPjMeta(r.pj,r):null;
-  const ini=r?initialByPj[r.pj]:null;
-  const PHASES_F=[["arrivee","Arrivée"],["tests","Tests"],["finProd","Fin de production"],["depart","Départ"]];
-  const pjComments=useMemo(()=>{
-    if(!r)return[];
-    return (comments?.[r.pj]||[]).map((c,i)=>({...c,_idx:i})).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  },[comments,r]);
-  const pjDelays=useMemo(()=>{
-    if(!r)return[];
-    return [...(delays?.[r.pj]||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  },[delays,r]);
-  const totalDelayDays=pjDelays.reduce((a,d)=>a+(d.days||0),0);
-
-  return(<div style={{display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
-    <div style={{background:T.card,borderRadius:12,boxShadow:T.shadowMd,width:280,flexShrink:0,maxHeight:720,display:"flex",flexDirection:"column"}}>
-      <div style={{padding:12,borderBottom:"1px solid "+T.line}}>
-        <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un PJ, projet, pays, chef..." style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,boxSizing:"border-box"}}/>
-      </div>
-      <div style={{overflowY:"auto",flex:1}}>
-        {filteredList.map(row=>{
-          const m=getPjMeta(row.pj,row);
-          const nCom=(comments?.[row.pj]||[]).length;
-          const nDel=(delays?.[row.pj]||[]).length;
-          return(<div key={row.pj} onClick={()=>setSelPj(row.pj)} style={{padding:"10px 14px",cursor:"pointer",background:selPj===row.pj?T.teal100:T.card,borderBottom:"1px solid "+T.surface}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
-              <span style={{fontWeight:700,color:T.teal600,fontSize:15}}>{row.pj}</span>
-              <span style={{fontSize:11,color:T.ink300,display:"inline-flex",alignItems:"center",gap:6}}>{nCom>0&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}><NavIcon name="comments" size={11}/>{nCom}</span>}{nDel>0&&<span style={{display:"inline-flex",alignItems:"center",gap:2}}><NavIcon name="clock" size={11}/>{nDel}</span>}</span>
-            </div>
-            <div style={{fontSize:13,color:T.ink500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.nomProjet}</div>
-          </div>);
-        })}
-        {filteredList.length===0&&<div style={{padding:20,textAlign:"center",color:T.ink300,fontSize:14}}>Aucun résultat.</div>}
-      </div>
-    </div>
-
-    <div style={{flex:1,minWidth:320,display:"flex",flexDirection:"column",gap:14}}>
-      {!r?<div style={{background:T.card,borderRadius:12,padding:30,textAlign:"center",color:T.ink300,boxShadow:T.shadowMd}}>Sélectionnez un PJ dans la liste.</div>:<>
-        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-            <div>
-              <div style={{fontFamily:T.fontDisplay,fontWeight:700,fontSize:24,color:T.ink900}}>{r.pj}</div>
-              <div style={{color:T.ink500,fontSize:15,marginTop:3,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>{meta.nomProjet} · <CountryFlag pays={meta.pays} size={13}/> {meta.pays} · {meta.chefProjet}</div>
-            </div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <Badge etat={r.etat}/>
-              <span style={{fontSize:14,color:T.ink500,fontWeight:600}}>{r.gamme}</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:16,color:T.ink900,marginBottom:10}}>Dates</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr repeat(3,auto)",gap:"8px 16px",fontSize:14,alignItems:"baseline"}}>
-            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Jalon</div>
-            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Initial</div>
-            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Révisé</div>
-            <div style={{fontWeight:700,color:T.ink300,fontSize:12,textTransform:"uppercase"}}>Δ</div>
-            {PHASES_F.map(([k,label])=>{
-              const iv=ini?ini[k]:null;
-              const rv=r[k];
-              const delta=(iv&&rv)?diffDays(new Date(iv),new Date(rv)):null;
-              return(<React.Fragment key={k}>
-                <div style={{fontWeight:600,color:T.ink700}}>{label}</div>
-                <div style={{color:T.ink500}}>{iv?fmt(new Date(iv)):"—"}</div>
-                <div style={{fontWeight:700,color:T.ink900}}>{rv?fmt(new Date(rv)):"—"}</div>
-                <div style={{fontWeight:700,color:delta==null?T.ink300:delta>0?T.red500:delta<0?T.emerald600:T.ink500}}>{delta==null?"—":(delta>0?"+":"")+delta+"j"}</div>
-              </React.Fragment>);
-            })}
-          </div>
-        </div>
-
-        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:700,fontSize:16,color:T.ink900,marginBottom:10}}>⏱️ Causes de retard ({pjDelays.length}{totalDelayDays>0?" · "+totalDelayDays+"j":""})</div>
-          {pjDelays.length===0?<div style={{color:T.ink300,fontSize:14}}>Aucune cause de retard enregistrée.</div>:
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {pjDelays.map(d=>(
-                <div key={d.id} style={{background:T.surface,borderRadius:9,padding:"9px 12px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
-                    <span style={{fontWeight:700,color:T.ink900,fontSize:14,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{d.type} — {d.days}j{d.groupPjs&&(()=>{const others=d.groupPjs.filter(p=>p!==r.pj);return <span style={{fontSize:11,color:T.violet600,background:T.violet100,borderRadius:5,padding:"1px 8px",fontWeight:700}}>groupé avec {others.length>3?others.slice(0,3).join(", ")+" +"+(others.length-3):others.join(", ")}</span>;})()}</span>
-                    <span style={{fontSize:12,color:T.ink300}}>{d.author} · {new Date(d.date).toLocaleDateString("fr-FR")}</span>
-                  </div>
-                  {d.note&&<div style={{fontSize:13,color:T.ink500,marginTop:3}}>{d.note}</div>}
-                </div>
-              ))}
-            </div>}
-        </div>
-
-        <div style={{background:T.card,borderRadius:12,padding:18,boxShadow:T.shadowMd}}>
-          <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:17,color:T.ink900,marginBottom:10,display:"flex",alignItems:"center",gap:8}}><NavIcon name="comments" size={15}/>Historique commentaires ({pjComments.length})</div>
-          {pjComments.length===0?<div style={{color:T.ink300,fontSize:14}}>Aucun commentaire.</div>:
-            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:400,overflowY:"auto"}}>
-              {pjComments.map(c=>(
-                <div key={c._idx} style={{background:c.private?T.amber100:T.surface,borderRadius:9,padding:"9px 12px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
-                    <span style={{fontWeight:700,color:T.teal600,fontSize:13,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{c.author}{c.private&&<span style={{fontSize:10.5,color:T.amber600,background:T.amber100,borderRadius:5,padding:"1px 6px",fontWeight:700}}>Privé</span>}{c.groupPjs&&(()=>{const others=c.groupPjs.filter(p=>p!==r.pj);return <span style={{fontSize:11,color:T.violet600,background:T.violet100,borderRadius:5,padding:"1px 8px",fontWeight:700}}>groupé avec {others.length>3?others.slice(0,3).join(", ")+" +"+(others.length-3):others.join(", ")}</span>;})()}</span>
-                    <span style={{fontSize:12,color:T.ink300}}>{new Date(c.date).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
-                  </div>
-                  <div style={{fontSize:13,color:T.ink700,whiteSpace:"pre-wrap",marginTop:3}}>{c.text}</div>
-                  {c.linkedDate&&<div style={{marginTop:4,fontSize:12,color:T.ink500,fontWeight:600}}>Lié au {fmt(new Date(c.linkedDate))}</div>}
-                </div>
-              ))}
-            </div>}
-        </div>
-      </>}
-    </div>
-  </div>);
-}
-
 export function ClosurePeriodsManager({closurePeriods,setClosurePeriods}){
   const [newStart,setNewStart]=useState("");
   const [newEnd,setNewEnd]=useState("");
@@ -1223,8 +829,8 @@ export function ClosurePeriodsManager({closurePeriods,setClosurePeriods}){
     const next=closurePeriods.filter((_,idx)=>idx!==i);
     setClosurePeriods(next);
   };
-  return(<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd,marginTop:16}}>
-    <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:600,fontSize:18,color:T.ink900,marginBottom:4,display:"flex",alignItems:"center",gap:8}}><NavIcon name="sun" size={17}/>Périodes de fermeture (vacances)</div>
+  return(<div style={{background:T.card,borderRadius:14,padding:20,border:"1px solid "+T.line,marginTop:16}}>
+    <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:4,display:"flex",alignItems:"center",gap:8}}><NavIcon name="sun" size={17}/>Périodes de fermeture (vacances)</div>
     <div style={{fontSize:14,color:T.ink500,marginBottom:14}}>
       Les semaines/jours concernés seront grisés dans le Calendrier pour tous les utilisateurs.
     </div>
@@ -1254,92 +860,3 @@ export function ClosurePeriodsManager({closurePeriods,setClosurePeriods}){
     </div>
   </div>);
 }
-
-export function ProductionCalendarManager({data,productionExclusions,toggleProductionExclusion}){
-  const [selectedPj,setSelectedPj]=useState("");
-  const [singleDate,setSingleDate]=useState("");
-  const [rangeStart,setRangeStart]=useState("");
-  const [rangeEnd,setRangeEnd]=useState("");
-  const r=data.find(x=>x.pj===selectedPj);
-  const prodRange=useMemo(()=>{
-    if(!r||!r.arrivee||!r.finProd)return null;
-    return{start:new Date(r.arrivee),end:new Date(r.finProd)};
-  },[r]);
-
-  const excluded=productionExclusions[selectedPj]||[];
-  const isProdDay=d=>{
-    if(!prodRange)return false;
-    if(d.getDay()===0||d.getDay()===6)return false;
-    return d>=prodRange.start&&d<=prodRange.end;
-  };
-
-  const addSingle=()=>{
-    if(!singleDate)return;
-    const d=new Date(singleDate+"T00:00:00");
-    if(!isProdDay(d)){alert("Ce jour est hors période de production, ou c'est un week-end.");return;}
-    const iso=toLocalISO(d);
-    if(!excluded.includes(iso))toggleProductionExclusion(selectedPj,iso);
-    setSingleDate("");
-  };
-  const addRange=()=>{
-    if(!rangeStart||!rangeEnd)return;
-    const start=new Date(rangeStart+"T00:00:00"),end=new Date(rangeEnd+"T00:00:00");
-    if(start>end){alert("La date de début doit précéder la date de fin.");return;}
-    let d=new Date(start);
-    while(d<=end){
-      if(isProdDay(d)){const iso=toLocalISO(d);if(!excluded.includes(iso))toggleProductionExclusion(selectedPj,iso);}
-      d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);
-    }
-    setRangeStart("");setRangeEnd("");
-  };
-
-  const inputStyle={padding:"8px 11px",borderRadius:8,border:"1px solid "+T.line,fontSize:14,fontFamily:T.font,color:T.ink700,background:T.card};
-
-  return(<div style={{background:T.card,borderRadius:14,padding:20,boxShadow:T.shadowMd,marginTop:16}}>
-    <div style={{fontFamily:T.fontDisplay,textTransform:"uppercase",letterSpacing:".03em",fontWeight:600,fontSize:18,color:T.ink900,marginBottom:4,display:"flex",alignItems:"center",gap:8}}><NavIcon name="factory" size={17}/>Désactiver des jours de production</div>
-    <div style={{fontSize:14,color:T.ink500,marginBottom:16}}>
-      Exclut des jours de l'affichage « Production » dans le Calendrier (mode Jour) — utile pour un jour férié ponctuel ou une période sans activité réelle.
-    </div>
-    <select value={selectedPj} onChange={e=>setSelectedPj(e.target.value)} style={{...inputStyle,marginBottom:16,width:"100%",maxWidth:280}}>
-      <option value="">— Choisir un PJ —</option>
-      {data.map(d=><option key={d.pj} value={d.pj}>{d.pj}</option>)}
-    </select>
-
-    {selectedPj&&!prodRange&&<div style={{fontSize:14,color:T.red500}}>Période de production non définie (Arrivée/Fin de prod manquante) pour ce PJ.</div>}
-
-    {prodRange&&<>
-      <div style={{fontSize:12.5,color:T.ink300,marginBottom:14}}>Période de production : {fmt(prodRange.start)} → {fmt(prodRange.end)} (jours ouvrés uniquement)</div>
-
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:14,marginBottom:16}}>
-        <div style={{background:T.surface,borderRadius:11,padding:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.ink700,marginBottom:8}}>Exclure un jour précis</div>
-          <div style={{display:"flex",gap:8}}>
-            <input type="date" value={singleDate} onChange={e=>setSingleDate(e.target.value)} style={{...inputStyle,flex:1}}/>
-            <button onClick={addSingle} disabled={!singleDate} style={{padding:"8px 16px",borderRadius:8,border:"none",background:singleDate?T.red500:T.surfaceAlt,color:singleDate?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:singleDate?"pointer":"default",whiteSpace:"nowrap"}}>Exclure</button>
-          </div>
-        </div>
-        <div style={{background:T.surface,borderRadius:11,padding:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.ink700,marginBottom:8}}>Exclure une période</div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input type="date" value={rangeStart} onChange={e=>setRangeStart(e.target.value)} style={{...inputStyle,flex:1}}/>
-            <span style={{color:T.ink300,fontSize:13}}>→</span>
-            <input type="date" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} style={{...inputStyle,flex:1}}/>
-          </div>
-          <button onClick={addRange} disabled={!rangeStart||!rangeEnd} style={{marginTop:8,width:"100%",padding:"8px 16px",borderRadius:8,border:"none",background:rangeStart&&rangeEnd?T.red500:T.surfaceAlt,color:rangeStart&&rangeEnd?"#fff":T.ink300,fontSize:14,fontWeight:700,cursor:rangeStart&&rangeEnd?"pointer":"default"}}>Exclure cette période</button>
-        </div>
-      </div>
-
-      <div style={{fontSize:13,fontWeight:700,color:T.ink700,marginBottom:8}}>Jours désactivés ({excluded.length})</div>
-      {excluded.length===0?<div style={{fontSize:13.5,color:T.ink300}}>Aucun jour exclu pour ce PJ.</div>:
-        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-          {[...excluded].sort().map(iso=>(
-            <span key={iso} style={{display:"flex",alignItems:"center",gap:6,background:T.red100,color:T.red600,borderRadius:8,padding:"6px 10px 6px 12px",fontSize:13,fontWeight:600}}>
-              {fmt(new Date(iso+"T00:00:00"))}
-              <button onClick={()=>toggleProductionExclusion(selectedPj,iso)} title="Réactiver ce jour" style={{background:"none",border:"none",color:T.red500,cursor:"pointer",fontSize:14,padding:0,fontWeight:700}}>✕</button>
-            </span>
-          ))}
-        </div>}
-    </>}
-  </div>);
-}
-

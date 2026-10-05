@@ -97,3 +97,15 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Graphiques (recharts) : infobulle et légende suivent le thème (variables posées par App.js) ── */
+.recharts-default-tooltip { background-color: var(--e-card, #fff) !important; border: 1px solid var(--e-line, #eee) !important; }
+.recharts-tooltip-label, .recharts-tooltip-item { color: var(--e-ink900, #15181c) !important; }
+.recharts-legend-item-text { color: var(--e-ink700, #3d4349) !important; }
+
+/* ── Champs de saisie sans fond explicite : suivent le thème (sinon blancs en mode sombre) ── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select {
+  background-color: var(--e-card, #fff);
+  color: var(--e-ink700, #3d4349);
+}
+input::placeholder, textarea::placeholder { color: var(--e-ink300, #a7acb1); opacity: 1; }

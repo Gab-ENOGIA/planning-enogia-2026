@@ -63,21 +63,27 @@ const LIGHT = {
 const DARK = {
   ...SHARED,
   mode:"dark",
-  teal600:"#B7C2DE", teal500:"#7C8EB8", teal400:"#95A4C6", teal100:"#1B2235",
-  surface:"#12171D", surfaceAlt:"#171D24", card:"#1A2026",
-  ink900:"#F0F1F0", ink700:"#C7CBCE", ink500:"#8E959B", ink300:"#565D63", ink100:"#242B32",
-  line:"#262D34",
+  // Mode sombre « ardoise douce » (demandé : « trop sombre, plus smooth ») : fond gris-bleu moyen, jamais noir, hiérarchie par la LUMINOSITÉ
+  // (page < panneau < carte < panneau neutre) plutôt que par des ombres, filets fins plus lisibles.
+  // « teal500 » est l'accent plein (fonds de boutons, aujourd'hui, barres) : choisi assez profond pour
+  // que le texte blanc posé dessus reste lisible (≈4,6:1) ; « teal600 » est l'accent clair pour le TEXTE.
+  teal600:"#BCC8E8", teal500:"#5C73B8", teal400:"#8FA2D6", teal100:"#2A3558",
+  surface:"#222A34", surfaceAlt:"#313B48", card:"#2A333E",
+  ink900:"#E9EDF2", ink700:"#C3CBD5", ink500:"#97A2AF", ink300:"#76818E", ink100:"#334050",
+  line:"#3C4756",
   // Équivalent sombre du gris neutre de la fiche projet, légèrement plus clair que card/surface
   // pour garder le même effet de "palier" qu'en mode clair sans jamais retomber sur le crème.
-  neuPanel:"#20262D", neuPanelDim:"#262D34",
-  amber600:"#E2A95A", amber500:"#C1831E", amber100:"#332812",
-  emerald600:"#5FD4A8", emerald500:"#2B9C78", emerald100:"#132B22",
-  violet600:"#B4A2E6", violet500:"#7C63B8", violet100:"#241F38",
-  red600:"#E58A8A", red500:"#CB4848", red100:"#331D1D",
-  ember600:"#EBA276", ember500:"#C97848", ember100:"#332016",
-  shadowSm:"0 1px 2px rgba(0,0,0,.4)",
-  shadowMd:"0 4px 16px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3)",
-  shadowLg:"0 16px 40px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.35)",
+  neuPanel:"#323C49", neuPanelDim:"#394453",
+  // Les bleus « marine » du logo sont invisibles sur fond sombre : versions éclaircies (texte, dégradés).
+  navy800:"#C9D3F0", navy700:"#3B4F94", navy600:"#6F86CC",
+  amber600:"#E8B468", amber500:"#D29A33", amber100:"#3A3017",
+  emerald600:"#6FD9B0", emerald500:"#2FA67F", emerald100:"#1B3A2F",
+  violet600:"#BBA9EE", violet500:"#8A72C8", violet100:"#312A50",
+  red600:"#F09A9A", red500:"#D65C5C", red100:"#402528",
+  ember600:"#EBA276", ember500:"#C97848", ember100:"#40291C",
+  shadowSm:"0 1px 2px rgba(0,0,0,.25)",
+  shadowMd:"0 4px 14px rgba(0,0,0,.28), 0 1px 2px rgba(0,0,0,.2)",
+  shadowLg:"0 14px 36px rgba(0,0,0,.38), 0 2px 8px rgba(0,0,0,.22)",
   neuOut:"0 0 0 1px rgba(255,255,255,.07), 0 1px 2px rgba(0,0,0,.3)",
   neuOutSm:"0 0 0 1px rgba(255,255,255,.07)",
   neuIn:"inset 0 0 0 1px rgba(255,255,255,.09)",
