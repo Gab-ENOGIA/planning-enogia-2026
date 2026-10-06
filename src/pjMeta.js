@@ -222,14 +222,14 @@ export function presenceRing(kind){
   const m=PRESENCE_META[kind];
   return m.color2?"inset 4px 0 0 "+m.color+", inset -4px 0 0 "+m.color2:"inset 0 0 0 2px "+m.color;
 }
-export function PresenceChip({kind,date,compact,fontSize,tiny}){
+export function PresenceChip({kind,date,compact,fontSize,tiny,short}){
   if(!kind)return null;
   const m=PRESENCE_META[kind];
   const fs=fontSize||(compact?11:12);
   const dd=date?String(date).slice(8,10)+"/"+String(date).slice(5,7)+"/"+String(date).slice(2,4):"";
   return(
     <span title={"Présence "+m.label+" aux tests"+(date?" le "+date:"")} style={{display:"inline-flex",alignItems:"center",gap:4,background:presenceBg(kind),color:m.ink,boxShadow:m.color2?"none":"inset 0 0 0 1px "+m.color,borderRadius:compact?5:6,padding:compact?"1px 6px":"2px 8px",fontSize:fs,fontWeight:800,lineHeight:1.3,whiteSpace:"nowrap",fontFamily:T.font}}>
-      <PersonIcon size={fs+1} color={m.ink}/>{tiny&&kind==="both"?"C + N":m.label}{dd&&!compact?" · "+dd:""}
+      {!short&&<PersonIcon size={fs+1} color={m.ink}/>}{short?(kind==="client"?"C":kind==="nobo"?"N":"C+N"):tiny&&kind==="both"?"C + N":m.label}{dd&&!compact?" · "+dd:""}
     </span>
   );
 }

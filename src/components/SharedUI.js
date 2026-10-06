@@ -26,7 +26,7 @@ export function DelayScopeNote(){
   </div>);
 }
 
-export function Badge({etat}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];const urgent=etat==="NOT ORDERED";return <span className={urgent?"enogia-pulse-urgent":""} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:20,padding:"2.5px 10px 2.5px 8px",fontSize:12,fontWeight:600,letterSpacing:".01em",display:"inline-flex",alignItems:"center",gap:5,boxShadow:"0 1px 2px rgba(15,40,60,.08)",maxWidth:"100%",boxSizing:"border-box"}}><span style={{width:6,height:6,borderRadius:"50%",background:c.bar,flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.label||etat}</span></span>;}
+export function Badge({etat,wrap}){const c=ETAT_META[etat]||ETAT_META["NOT ORDERED"];const urgent=etat==="NOT ORDERED";return <span className={urgent?"enogia-pulse-urgent":""} style={{background:c.bg,color:c.text,border:"1px solid "+c.border,borderRadius:wrap?14:20,padding:"2.5px 10px 2.5px 8px",fontSize:12,fontWeight:600,letterSpacing:".01em",display:"inline-flex",alignItems:"center",gap:5,boxShadow:"0 1px 2px rgba(15,40,60,.08)",maxWidth:"100%",boxSizing:"border-box"}}><span style={{width:6,height:6,borderRadius:"50%",background:c.bar,flexShrink:0}}/><span style={wrap?{lineHeight:1.2,overflowWrap:"break-word",minWidth:0}:{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.label||etat}</span></span>;}
 
 export function DropFilter({label,options,selected,onChange,getLabel,icon}){
   const [open,setOpen]=useState(false);
@@ -161,7 +161,7 @@ export function PinGate({onUnlock}){
 }
 
 
-export function ImportButton({onImport, busy, label, accent, helpText, warnText, confirmMessage, hasExisting, inputId, iconOnly}){
+export function ImportButton({onImport, busy, label, accent, helpText, warnText, confirmMessage, hasExisting, inputId, iconOnly, iconGlyph}){
   const [open,setOpen]=useState(false);
   const [pos,setPos]=useState({top:0,left:0});
   const btnRef=React.useRef(null);
@@ -217,7 +217,7 @@ export function ImportButton({onImport, busy, label, accent, helpText, warnText,
     <button ref={btnRef} onClick={openMenu} disabled={busy} title={iconOnly?btnLabel:undefined} style={iconOnly?{width:26,height:26,borderRadius:7,border:"1px solid "+T.line,background:"transparent",color:T.ink500,fontWeight:700,fontSize:15,lineHeight:1,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",justifyContent:"center",padding:0}:{padding:"5px 9px",borderRadius:7,border:"none",background:bg,color:"#fff",fontWeight:700,fontSize:11,cursor:busy?"default":"pointer",opacity:busy?.6:1,display:"flex",alignItems:"center",gap:5,boxShadow:T.shadowSm,transition:"transform .12s ease, box-shadow .12s ease"}}
       onMouseEnter={e=>{if(!busy){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=T.shadowMd;}}}
       onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=T.shadowSm;}}>
-      {iconOnly?(busy?"…":"⋯"):busy?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NavIcon name="upload" size={10}/>{btnLabel}</span>}
+      {iconOnly?(busy?"…":(iconGlyph||"⋯")):busy?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:10,height:10,borderRadius:"50%",border:"2px solid rgba(255,255,255,.4)",borderTopColor:"#fff",display:"inline-block",animation:"enogiaSpin .8s linear infinite"}}/>Mise à jour...</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NavIcon name="upload" size={10}/>{btnLabel}</span>}
     </button>
     {open&&!busy&&<>
       <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:9998}}/>

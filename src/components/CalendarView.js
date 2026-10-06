@@ -119,6 +119,7 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   // px), et on génère une plage bien plus longue à défiler vers la droite.
   const TOTAL_WEEKS=60, TOTAL_DAYS=300;
   const [viewW,setViewW]=useState(1100);
+  const [viewMeasured,setViewMeasured]=useState(false);
   const zoomIn=()=>setZoomLevel(z=>Math.max(0,z-1));
   const zoomOut=()=>setZoomLevel(z=>Math.min(maxZoomLevel,z+1));
 
@@ -167,17 +168,11 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   const todayDayIdx=days.findIndex(d=>d.toDateString()===today.toDateString());
   const DAY_NAMES=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 
-  const goToday=()=>{
-    if(mode==="week")setAnchor(weekStartOf(today));
-    else{const d=new Date(today);d.setHours(0,0,0,0);setDayAnchor(d);}
-    if(scrollRef.current)scrollRef.current.scrollLeft=0;
-  };
-
   const scrollRef=React.useRef(null);
   useEffect(()=>{
     const el=scrollRef.current;
     if(!el)return;
-    const measure=()=>setViewW(el.clientWidth||1100);
+    const measure=()=>{setViewW(el.clientWidth||1100);setViewMeasured(true);};
     measure();
     if(typeof ResizeObserver==="undefined"){window.addEventListener("resize",measure);return ()=>window.removeEventListener("resize",measure);}
     const ro=new ResizeObserver(measure);
@@ -200,6 +195,18 @@ export function CalendarView({data,onSelectPj,mode,setMode,anchor,setAnchor,dayA
   const weightOf=n=>mode==="week"?n:days.slice(0,n).reduce((a,d)=>a+((d.getDay()===0||d.getDay()===6)?WE_RATIO:1),0);
   let effCount=visCount;
   while(effCount>1&&avail/weightOf(effCount)<MIN_COL)effCount--;
+  // Vue CENTRÉE sur la date du jour (demandé : « les centrer sur la date du jour ») : la plage visible
+  // commence ~la moitié des colonnes avant aujourd'hui, donc « aujourd'hui » tombe au milieu. Appliqué à
+  // l'ouverture (une fois la largeur mesurée), au changement Semaine/Jour et sur « Aujourd'hui ».
+  const centerOnToday=()=>{
+    if(mode==="week"){const w=weekStartOf(today);w.setDate(w.getDate()-7*Math.floor((effCount-1)/2));setAnchor(w);}
+    else{const d=new Date(today);d.setHours(0,0,0,0);d.setDate(d.getDate()-Math.floor(effCount/2));setDayAnchor(d);}
+    if(scrollRef.current)scrollRef.current.scrollLeft=0;
+  };
+  const goToday=centerOnToday;
+  useEffect(()=>{if(viewMeasured)centerOnToday();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[viewMeasured,mode]);
   const unit=Math.floor((avail/weightOf(effCount))*100)/100;
   const colPx=unit;
   const wePx=Math.floor(unit*WE_RATIO*100)/100;

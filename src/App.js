@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { db, auth, ALLOWED_EMAIL_DOMAIN } from "./firebase";
-import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import "./styles.css";
 
@@ -33,7 +33,7 @@ const DEFAULT_DELAY_TYPES=[
   "Aléas planning client","Retard études","Manque de main d'œuvre","Autre",
 ];
 
-const APP_BUILD_VERSION = "2026-10-05-v80-retards-kanban-compteur-auto-depuis-19-05";
+const APP_BUILD_VERSION = "2026-10-06-v94-fiche-centree-barres-fines-arrondies";
 
 export default function App(){
   // Utilisateur connecté via Google, restreint aux comptes @enogia.com (null tant que non connecté).
@@ -109,6 +109,7 @@ export default function App(){
   const [initialData,setInitialData]=useState([]);
   const [initialImporting,setInitialImporting]=useState(false);
   const [lastInitialImport,setLastInitialImport]=useState(null);
+  const [lastInitialAdd,setLastInitialAdd]=useState(null);
   const [view,setView]=useState("table");
   // Format du calendrier (mode semaine/jour, position, zoom) persisté en localStorage :
   // reste identique quand on quitte/revient sur l'onglet Calendrier, et même après rechargement de la page.
@@ -191,6 +192,7 @@ export default function App(){
         const d = snap.data();
         setInitialData(d.rows || []);
         setLastInitialImport(d.lastImport || null);
+        setLastInitialAdd(d.lastAdd || null);
       }
     }, (err)=>{
       console.error("Erreur Firestore (initial):", err);
@@ -513,6 +515,11 @@ export default function App(){
     setSavingProgress(false);
   },[progress]);
 
+  // GARANTIE (demandé : « même si je fais un import de planning je souhaite que ça ne change rien » pour
+  // les MAJ faites sur le site) : un import n'écrit QUE le document des lignes du planning (dates, noms
+  // MS Project). Tout ce qui est saisi dans l'app — pays, chef de projet, nom, gamme (pjMetaOverrides),
+  // état, avancement, présence aux tests, jours de production, retards, commentaires — vit dans des
+  // documents Firestore séparés, clés par n° de PJ, et passe toujours PAR-DESSUS les données importées.
   const handleImport=useCallback(async (rows,indice)=>{
     setImporting(true);
     try{
@@ -536,6 +543,29 @@ export default function App(){
     }catch(e){
       console.error(e);
       alert("Erreur lors de l'enregistrement du planning initial : " + e.message);
+    }
+    setInitialImporting(false);
+  },[]);
+
+  // AJOUT au planning initial (nouveau, ne remplace pas l'import initial ci-dessus) : n'ajoute que les
+  // PJ absents — ceux déjà ancrés ne sont jamais modifiés. On relit le document juste avant d'écrire
+  // (pas l'état local, qui peut être en retard) et on garde une copie de l'initial précédent.
+  const handleInitialAdd=useCallback(async newRows=>{
+    setInitialImporting(true);
+    try{
+      const snap=await getDoc(INITIAL_DOC_REF());
+      const cur=snap.exists()?snap.data():{};
+      const curRows=cur.rows||[];
+      const have=new Set(curRows.map(r=>r.pj));
+      const stamp=new Date().toLocaleString("fr-FR");
+      const added=newRows.filter(r=>!have.has(r.pj)).map(r=>({...r,anchoredAt:stamp}));
+      if(added.length===0){setInitialImporting(false);return;}
+      try{await setDoc(doc(db,"planning","initialBackup"),{rows:curRows,lastImport:cur.lastImport||null,savedAt:stamp,reason:"avant ajout de "+added.length+" projet(s)"});}
+      catch(e){console.warn("Sauvegarde de l'initial impossible (l'ajout continue, rien n'est écrasé) :",e);}
+      await setDoc(INITIAL_DOC_REF(),{...cur,rows:[...curRows,...added],lastImport:cur.lastImport||stamp,lastAdd:stamp});
+    }catch(e){
+      console.error(e);
+      alert("Erreur lors de l'ajout au planning initial : "+e.message);
     }
     setInitialImporting(false);
   },[]);
@@ -667,13 +697,13 @@ export default function App(){
               <span style={{fontFamily:T.fontDisplay,fontWeight:600,color:T.ink900,fontSize:22,display:"flex",alignItems:"center",gap:9}}><NavIcon name="lock" size={20}/>Espace Manager</span>
               <button onClick={()=>setPinOk(false)} style={{padding:"7px 15px",borderRadius:10,border:"none",background:T.surface,boxShadow:T.neuOutSm,fontSize:15,cursor:"pointer",color:T.ink700,fontWeight:600}}>Verrouiller</button>
             </div>
-            <ManagerPanel data={dataWithOverrides} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} onInitialImport={handleInitialImport} initialImporting={initialImporting}
+            <ManagerPanel data={dataWithOverrides} progress={progress} setProgress={setProgress} initialData={initialData} lastInitialImport={lastInitialImport} lastInitialAdd={lastInitialAdd} onInitialImport={handleInitialImport} onInitialAdd={handleInitialAdd} initialImporting={initialImporting}
               etatChoice={etatChoice} setEtatFor={setEtatFor} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}
               tab={managerTab} setTab={setManagerTab} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}
               closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriodsAndSave}
               productionExclusions={productionExclusions} setProductionExclusionDays={setProductionExclusionDays}
               comments={comments} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypesAndSave} addDelayAllocationMulti={addDelayAllocationMulti} deleteDelayAllocation={(pj,id)=>deleteDelayAllocation(pj,id,PIN)}
-              managerEmails={managerEmails} setManagerEmails={setManagerEmailsAndSave} currentUserEmail={currentUser?.email} authorName={authorName} buildVersion={canEditMeta?APP_BUILD_VERSION:null}/>
+              managerEmails={managerEmails} setManagerEmails={setManagerEmailsAndSave} currentUserEmail={currentUser?.email} authorName={authorName} buildVersion={canEditMeta?APP_BUILD_VERSION:null} savePjMetaOverride={savePjMetaOverride} addComment={addComment} deleteComment={(pj,idx)=>deleteComment(pj,idx,PIN)}/>
           </div>
           :<PinGate onUnlock={()=>setPinOk(true)}/>)
         :(

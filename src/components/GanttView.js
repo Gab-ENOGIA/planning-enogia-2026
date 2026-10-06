@@ -55,6 +55,7 @@ export function GanttView({data,progress,df,selEtats,setSelEtats,allPJs,selPJs,s
   const zoomOut=()=>{captureAnchor();setDayW(w=>{const i=ZOOM_LEVELS.indexOf(w);return ZOOM_LEVELS[Math.max(0,i-1)]||ZOOM_LEVELS[0];});};
   const zoomIn=()=>{captureAnchor();setDayW(w=>{const i=ZOOM_LEVELS.indexOf(w);return ZOOM_LEVELS[Math.min(ZOOM_LEVELS.length-1,i+1)]||ZOOM_LEVELS[ZOOM_LEVELS.length-1];});};
   const colW=240;
+  const endPad=Math.round((typeof window!=="undefined"?window.innerWidth:1400)/2);
   const rowH=54;
   // En-tête à 3 bandes — mois, puis numéro de semaine ("SXX", demandé explicitement : "rajouter les
   // SXX (numéro de semaine) dans la page gantt"), puis le repère jour existant — plutôt que de
@@ -68,10 +69,14 @@ export function GanttView({data,progress,df,selEtats,setSelEtats,allPJs,selPJs,s
   const dayOf=d=>Math.round((d-yearStart)/86400000);
   const xOf=d=>dayOf(d)*dayW;
 
+  // Centre un point x (px) dans la zone visible du planning (la colonne PJ de gauche, collée, n'en fait
+  // pas partie) — demandé : « les centrer sur la date du jour ».
+  const centerTarget=x=>Math.max(0,x-((scrollRef.current?scrollRef.current.clientWidth:1000)-colW)/2);
+
   // positionne le scroll sur "aujourd'hui" au premier rendu
   useEffect(()=>{
     if(scrollRef.current){
-      const target=Math.max(0,xOf(today)-220);
+      const target=centerTarget(xOf(today)+dayW/2);
       scrollRef.current.scrollLeft=target;
       if(topScrollRef.current)topScrollRef.current.scrollLeft=target;
     }
@@ -92,7 +97,7 @@ export function GanttView({data,progress,df,selEtats,setSelEtats,allPJs,selPJs,s
 
   const scrollToDay=dIdx=>{
     if(scrollRef.current){
-      const target=Math.max(0,dIdx*dayW-220);
+      const target=centerTarget(dIdx*dayW+dayW/2);
       scrollRef.current.scrollTo({left:target,behavior:"smooth"});
       if(topScrollRef.current)topScrollRef.current.scrollTo({left:target,behavior:"smooth"});
     }
@@ -133,7 +138,7 @@ export function GanttView({data,progress,df,selEtats,setSelEtats,allPJs,selPJs,s
     </div>
 
     <div ref={topScrollRef} onScroll={syncFromTop} style={{overflowX:"auto",overflowY:"hidden",height:16}}>
-      <div style={{width:colW+totalDays*dayW,height:1}}/>
+      <div style={{width:colW+totalDays*dayW+endPad,height:1}}/>
     </div>
 
     <div ref={scrollRef} onScroll={syncFromBottom} style={{display:"flex",overflowX:"auto",overflowY:"auto",maxHeight:"calc(100vh - 300px)",position:"relative"}}>
@@ -196,6 +201,8 @@ export function GanttView({data,progress,df,selEtats,setSelEtats,allPJs,selPJs,s
             sûr qu'elle descend exactement jusqu'à la dernière ligne quel que soit le nombre de PJ. */}
         <div style={{position:"absolute",left:xOf(today),top:HEADER_H,height:ganttH-HEADER_H,width:2,background:T.red500,opacity:.5,zIndex:3}}/>
       </div>
+      {/* Marge de fin : sans elle, « aujourd'hui » ne peut pas être centré quand il est proche de la fin de la plage. */}
+      <div style={{width:endPad,height:1,flexShrink:0}}/>
     </div>
 
 

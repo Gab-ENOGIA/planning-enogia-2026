@@ -6,6 +6,9 @@ import { fmt, toLocalISO, diffDays, weekStartOf } from "../parsers";
 import { DropFilter, ImportButton, NavIcon, Select } from "./SharedUI";
 import { CARD, KpiRow, EmptyNote, AvancementTab, StatutTab, KpiAvancement, DelayInsights, DelaysTab, ProductionCalendarManager } from "./ManagerParts";
 import { ProjectFileManager } from "./ManagerFiche";
+import { InitialAddReview } from "./InitialAdd";
+import { SanteTab } from "./Feux";
+import { CodirDialog } from "./CodirReport";
 
 // Filtre de période (mois et/ou année) réutilisable sur chaque graphique temporel
 export function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMonth=true}){
@@ -14,7 +17,7 @@ export function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMon
     {showMonth&&<div style={{width:128}}><Select compact value={month==null?"":month} onChange={e=>setMonth(e.target.value===""?null:+e.target.value)} options={[{value:"",label:"Tous les mois"},...MONTHS.map((m,i)=>({value:i,label:m}))]}/></div>}
   </div>);
 }
-export function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,onInitialImport,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,setProductionExclusionDays,comments,delays,delayTypes,setDelayTypes,addDelayAllocationMulti,deleteDelayAllocation,managerEmails,setManagerEmails,currentUserEmail,authorName,buildVersion}){
+export function ManagerPanel({data,progress,setProgress,initialData,lastInitialImport,lastInitialAdd,onInitialImport,onInitialAdd,initialImporting,etatChoice,setEtatFor,saveProgress,savingProgress,progressSaved,tab,setTab,clientPresence,setClientPresenceFor,closurePeriods,setClosurePeriods,productionExclusions,setProductionExclusionDays,comments,delays,delayTypes,setDelayTypes,addDelayAllocationMulti,deleteDelayAllocation,managerEmails,setManagerEmails,currentUserEmail,authorName,buildVersion,savePjMetaOverride,addComment,deleteComment}){
   const [fEtat,setFEtat]=useState(new Set(ALL_ETATS));
   const [kpiStep,setKpiStep]=useState("depart");
   const [kpiTab,setKpiTab]=useState("synthese"); // sous-onglet KPI par famille
@@ -290,19 +293,21 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
 
   // ── Navigation Manager : onglets horizontaux + sous-onglets par famille ──
   // « Il y a bcp de KPI… plusieurs petits onglets par famille de KPI ? » → un sous-onglet par famille.
-  const GROUP_OF={fiche:"fiche",derives:"derives",avancement:"suivi",statut:"suivi",retards:"retards",acces:"reglages",vacances:"reglages",production:"reglages"};
+  const GROUP_OF={fiche:"fiche",derives:"derives",avancement:"suivi",statut:"suivi",sante:"suivi",retards:"retards",acces:"reglages",vacances:"reglages",production:"reglages"};
   const TOP=[["fiche","Fiche projet","list","fiche"],["derives","KPI","chart","derives"],["suivi","Suivi","gauge","avancement"],["retards","Retards","warning","retards"],["reglages","Réglages","lock","production"]];
   const SUBS={
     derives:[["synthese","Synthèse"],["derives","Dérives"],["charge","Charge"],["avancement","Avancement"],["retards","Retards"]],
-    suivi:[["avancement","Avancement"],["statut","Statut & état"]],
+    suivi:[["avancement","Avancement"],["statut","Statut & état"],["sante","Santé projets"]],
     reglages:[["production","Production"],["vacances","Vacances"],["acces","Accès Manager"]],
   };
   const group=GROUP_OF[tab]||"derives";
   const subItems=SUBS[group]||null;
   const subValue=group==="derives"?kpiTab:tab;
   const onSub=id=>{if(group==="derives")setKpiTab(id);else setTab(id);};
-  const showFilters=tab==="derives"||tab==="avancement"||tab==="statut";
+  const showFilters=tab==="derives"||tab==="avancement"||tab==="statut"||tab==="sante";
   const hasInitial=initialData.length>0;
+  const [codirOpen,setCodirOpen]=useState(false); // rapport CODIR (synthèse + 1 page par PJ, export PDF)
+  const [pendingAdd,setPendingAdd]=useState(null); // lignes du fichier en cours d'examen pour l'ajout à l'initial
 
   return(<div style={{display:"flex",flexDirection:"column",gap:14,fontFamily:T.font}}>
     {/* ── Barre d'onglets + petite tuile « planning initial » ── */}
@@ -313,13 +318,15 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
             onMouseEnter={e=>{if(!on)e.currentTarget.style.color=T.ink900;}} onMouseLeave={e=>{if(!on)e.currentTarget.style.color=T.ink500;}}><NavIcon name={icon} size={15}/>{l}</button>
         );})}
       </div>
-      <div style={{marginLeft:"auto",marginBottom:6,display:"flex",alignItems:"center",gap:9,padding:"4px 5px 4px 11px",border:"1px solid "+(hasInitial?T.line:T.amber500),borderRadius:10,background:hasInitial?T.card:T.amber100}}>
+      <button onClick={()=>setCodirOpen(true)} title="Générer la synthèse CODIR (PDF) pour les projets choisis" style={{marginLeft:"auto",marginBottom:6,display:"inline-flex",alignItems:"center",gap:7,padding:"8px 13px",border:"none",borderRadius:10,background:"linear-gradient(135deg,"+T.teal500+","+T.navy700+")",color:"#fff",fontWeight:700,fontSize:13,fontFamily:T.font,cursor:"pointer"}}><NavIcon name="chart" size={14}/>Rapport CODIR</button>
+      <div style={{marginBottom:6,display:"flex",alignItems:"center",gap:9,padding:"4px 5px 4px 11px",border:"1px solid "+(hasInitial?T.line:T.amber500),borderRadius:10,background:hasInitial?T.card:T.amber100}}>
         <span style={{color:hasInitial?T.teal600:T.amber600,display:"inline-flex"}}><NavIcon name={hasInitial?"pin":"warning"} size={13}/></span>
         <div style={{lineHeight:1.25}}>
           <div style={{fontSize:12,fontWeight:700,color:T.ink900}}>Planning initial</div>
-          <div style={{fontSize:11,color:hasInitial?T.ink500:T.amber600}}>{hasInitial?initialData.length+" unités"+(lastInitialImport?" · "+lastInitialImport:" · figé"):"non importé — dérives indisponibles"}</div>
+          <div style={{fontSize:11,color:hasInitial?T.ink500:T.amber600}}>{hasInitial?initialData.length+" unités"+(lastInitialImport?" · "+lastInitialImport:" · figé")+(lastInitialAdd?" · ajout "+lastInitialAdd:""):"non importé — dérives indisponibles"}</div>
         </div>
-        <ImportButton
+        {/* Import initial complet (⋯) : seulement tant qu'aucun initial n'existe (première mise en place). Ensuite on n'ajoute que de nouveaux PJ avec ＋, les PJ ancrés ne sont plus écrasables par erreur. */}
+        {!hasInitial&&<ImportButton
           iconOnly
           onImport={onInitialImport}
           busy={initialImporting}
@@ -330,7 +337,19 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           confirmMessage={"Un planning initial a déjà été importé"+(lastInitialImport?(" le "+lastInitialImport):"")+".\n\nCe planning sert de référence figée pour calculer les dérives — il ne devrait normalement être importé qu'une seule fois.\n\nÊtes-vous sûr de vouloir l'écraser ?"}
           helpText={<>Export Excel (.xlsx) avec colonnes <b>Nom, Début, Niveau hiérarchique</b>.<br/>Ce planning sera <b>figé</b> et servira de référence pour calculer les dérives par rapport au planning révisé.</>}
           warnText="Ce planning devient la référence figée (dates initiales) — à importer une seule fois normalement."
-        />
+        />}
+        {hasInitial&&<ImportButton
+          iconOnly
+          iconGlyph="＋"
+          onImport={rows=>setPendingAdd(rows)}
+          busy={initialImporting}
+          label="Ajouter des projets à l'initial"
+          accent={"linear-gradient(135deg,"+T.teal500+","+T.navy700+")"}
+          hasExisting={false}
+          inputId="msp-file-initial-add"
+          helpText={<>Même format que l'import initial. Le site repère les <b>nouveaux PJ</b> du fichier et vous propose de les ancrer.<br/>Les PJ déjà dans l'initial ne sont <b>jamais modifiés</b>.</>}
+          warnText="Rien n'est enregistré avant votre validation."
+        />}
       </div>
     </div>
 
@@ -521,6 +540,9 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
         </div>}
       {fd.length===0&&<EmptyNote>Aucune donnée pour la sélection.</EmptyNote>}
     </div>}
+
+    {codirOpen&&<CodirDialog data={data} initialData={initialData} comments={comments} delays={delays} progress={progress} onClose={()=>setCodirOpen(false)}/>}
+    {pendingAdd&&<InitialAddReview parsed={pendingAdd} initialData={initialData} busy={initialImporting} onCancel={()=>setPendingAdd(null)} onConfirm={async rows=>{await onInitialAdd(rows);setPendingAdd(null);}}/>}
 
     {tab==="derives"&&kpiTab==="derives"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
       {!hasInitial&&<div style={{background:T.amber100,color:T.amber600,borderRadius:12,padding:"16px 18px",fontSize:14,display:"flex",alignItems:"center",gap:10}}><NavIcon name="warning" size={16}/>Aucun planning initial importé — les dérives ne peuvent pas être calculées. Utilisez le menu ⋯ de la tuile « Planning initial » en haut à droite.</div>}
@@ -748,8 +770,9 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
     {tab==="derives"&&kpiTab==="retards"&&<DelayInsights delays={delays} delayTypes={delayTypes}/>}
 
     {tab==="avancement"&&<AvancementTab rows={fd} progress={progress} setProgress={setProgress} saveProgress={saveProgress} savingProgress={savingProgress} progressSaved={progressSaved}/>}
+    {tab==="sante"&&<SanteTab rows={fd} onSave={(pj,f)=>savePjMetaOverride&&savePjMetaOverride(pj,f)}/>}
     {tab==="statut"&&<StatutTab rows={fd} etatChoice={etatChoice} setEtatFor={setEtatFor} clientPresence={clientPresence} setClientPresenceFor={setClientPresenceFor}/>}
-    {tab==="fiche"&&<ProjectFileManager data={data} initialData={initialData} comments={comments} delays={delays} progress={progress}/>}
+    {tab==="fiche"&&<ProjectFileManager data={data} initialData={initialData} comments={comments} delays={delays} progress={progress} savePjMetaOverride={savePjMetaOverride} addComment={addComment} deleteComment={deleteComment} addDelayAllocationMulti={addDelayAllocationMulti} deleteDelayAllocation={deleteDelayAllocation} delayTypes={delayTypes} authorName={authorName}/>}
     {tab==="retards"&&<DelaysTab data={data} delays={delays} delayTypes={delayTypes} setDelayTypes={setDelayTypes} addDelayAllocationMulti={addDelayAllocationMulti} deleteDelayAllocation={deleteDelayAllocation} authorName={authorName}/>}
     {tab==="acces"&&<>
       <ManagerAccessManager managerEmails={managerEmails} setManagerEmails={setManagerEmails} currentUserEmail={currentUserEmail}/>
