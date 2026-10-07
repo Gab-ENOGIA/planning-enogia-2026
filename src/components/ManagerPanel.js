@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 import { T } from "../theme";
-import { getPjMeta, initials, GAMME_COLORS, ETAT_META, ALL_ETATS, ALL_GAMMES, MONTHS, today } from "../pjMeta";
+import { SerieTag, getPjMeta, initials, GAMME_COLORS, ETAT_META, ALL_ETATS, ALL_GAMMES, MONTHS, today } from "../pjMeta";
 import { fmt, toLocalISO, diffDays, weekStartOf } from "../parsers";
 import { DropFilter, ImportButton, NavIcon, Select } from "./SharedUI";
 import { CARD, KpiRow, EmptyNote, AvancementTab, StatutTab, KpiAvancement, DelayInsights, DelaysTab, ProductionCalendarManager } from "./ManagerParts";
@@ -9,6 +9,7 @@ import { ProjectFileManager } from "./ManagerFiche";
 import { InitialAddReview } from "./InitialAdd";
 import { SanteTab } from "./Feux";
 import { CodirDialog } from "./CodirReport";
+import { SerieTab } from "./Series";
 
 // Filtre de période (mois et/ou année) réutilisable sur chaque graphique temporel
 export function PeriodFilter({yearsAvailable,year,setYear,month,setMonth,showMonth=true}){
@@ -293,12 +294,12 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
 
   // ── Navigation Manager : onglets horizontaux + sous-onglets par famille ──
   // « Il y a bcp de KPI… plusieurs petits onglets par famille de KPI ? » → un sous-onglet par famille.
-  const GROUP_OF={fiche:"fiche",derives:"derives",avancement:"suivi",statut:"suivi",sante:"suivi",retards:"retards",acces:"reglages",vacances:"reglages",production:"reglages"};
+  const GROUP_OF={fiche:"fiche",derives:"derives",avancement:"suivi",statut:"suivi",sante:"suivi",retards:"retards",acces:"reglages",serie:"reglages",vacances:"reglages",production:"reglages"};
   const TOP=[["fiche","Fiche projet","list","fiche"],["derives","KPI","chart","derives"],["suivi","Suivi","gauge","avancement"],["retards","Retards","warning","retards"],["reglages","Réglages","lock","production"]];
   const SUBS={
     derives:[["synthese","Synthèse"],["derives","Dérives"],["charge","Charge"],["avancement","Avancement"],["retards","Retards"]],
     suivi:[["avancement","Avancement"],["statut","Statut & état"],["sante","Santé projets"]],
-    reglages:[["production","Production"],["vacances","Vacances"],["acces","Accès Manager"]],
+    reglages:[["serie","N° de série"],["production","Production"],["vacances","Vacances"],["acces","Accès Manager"]],
   };
   const group=GROUP_OF[tab]||"derives";
   const subItems=SUBS[group]||null;
@@ -484,7 +485,7 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
                 </tr></thead>
                 <tbody>{workloadByPJ.map(r=>(
                   <tr key={r.pj} style={{borderBottom:"1px solid "+T.surfaceAlt}}>
-                    <td style={{padding:"7px 10px",fontWeight:700,color:T.teal600}}>{r.pj}</td>
+                    <td style={{padding:"7px 10px",fontWeight:700,color:T.teal600}}>{r.pj} <SerieTag pj={r.pj}/></td>
                     <td style={{padding:"7px 10px",color:T.ink500}}>{r.gamme}</td>
                     <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:T.ink900}}>{r.heuresAtelier}h</td>
                     <td style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:T.violet600}}>{r.heuresAutom}h</td>
@@ -737,7 +738,7 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
           <div style={{fontFamily:T.fontDisplay,fontWeight:600,fontSize:15,color:T.ink900,marginBottom:8}}>Top 5 dérives — {STEP_LABELS[kpiStep]} (vs planning initial)</div>
           {worstDrifts.map(r=>{const d=r[kpiStep].delta;const c=d>0?T.red500:d<0?T.emerald500:T.ink500;return(
             <div key={r.pj} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid "+T.surface}}>
-              <span style={{fontWeight:700,color:T.teal600,fontSize:14,minWidth:85}}>{r.pj}</span>
+              <span style={{fontWeight:700,color:T.teal600,fontSize:14,minWidth:85}}>{r.pj}<SerieTag pj={r.pj} style={{marginLeft:7}}/></span>
               <span style={{color:T.ink300,fontSize:12,minWidth:50}}>{r.gamme}</span>
               <span style={{fontSize:13,color:T.ink500}}>{fmt(r[kpiStep].ini?new Date(r[kpiStep].ini):null)} → {fmt(r[kpiStep].rev?new Date(r[kpiStep].rev):null)}</span>
               <span style={{marginLeft:"auto",fontWeight:800,fontSize:15,color:c}}>{d>0?"+":""}{d}j</span>
@@ -753,7 +754,7 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
             </tr></thead>
             <tbody>{driftRows.map((r,i)=>(
               <tr key={i} style={{borderBottom:"1px solid "+T.surface,background:r.hasInitial?T.card:T.surface}}>
-                <td style={{padding:"9px 12px",fontWeight:700,color:T.teal600,fontSize:16,whiteSpace:"nowrap"}}>{r.pj}</td>
+                <td style={{padding:"9px 12px",fontWeight:700,color:T.teal600,fontSize:16,whiteSpace:"nowrap"}}>{r.pj} <SerieTag pj={r.pj} size={11}/></td>
                 <td style={{padding:"9px 12px",color:T.ink500,fontSize:15,whiteSpace:"nowrap"}}>{r.gamme}</td>
                 {["arrivee","tests","finProd","depart"].map(k=>{const c=r[k];const d=c.delta;const col=d==null?T.ink300:d>0?T.red500:d<0?T.emerald500:T.ink500;return(<React.Fragment key={k}>
                   <td style={{padding:"9px 12px",fontSize:15,color:T.ink700,whiteSpace:"nowrap"}}>{c.rev?fmt(new Date(c.rev)):"—"}</td>
@@ -782,6 +783,7 @@ export function ManagerPanel({data,progress,setProgress,initialData,lastInitialI
         <span style={{fontFamily:"monospace",fontSize:12.5,fontWeight:600,color:T.ink700,background:T.ink100,borderRadius:7,padding:"3px 10px"}}>build {buildVersion}</span>
       </div>}
     </>}
+    {tab==="serie"&&<SerieTab data={data} savePjMetaOverride={savePjMetaOverride}/>}
     {tab==="vacances"&&<ClosurePeriodsManager closurePeriods={closurePeriods} setClosurePeriods={setClosurePeriods}/>}
     {tab==="production"&&<ProductionCalendarManager data={data} productionExclusions={productionExclusions} setProductionExclusionDays={setProductionExclusionDays}/>}
     </div>

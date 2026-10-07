@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { T } from "../theme";
-import { getPjMeta, CountryFlag, ETAT_META, PRESENCE_META, presenceKind, presenceBg, today } from "../pjMeta";
+import { getPjMeta, SerieTag, CountryFlag, ETAT_META, PRESENCE_META, presenceKind, presenceBg, today } from "../pjMeta";
 import { diffDays } from "../parsers";
 import { NavIcon } from "./SharedUI";
 import { FEUX, FEU_LEVELS, feuxOf, worstFeu, NOTE_LABELS, NOTE_ORDER } from "./Feux";
@@ -144,7 +144,7 @@ function SummaryPage({chunk,idx,label,page,total,all}){
   const risk=all.filter(i=>i.worst==="red").length,watch=all.filter(i=>i.worst==="yellow").length;
   const late=all.filter(i=>i.ecart>0).length;
   const kpi=(v,l,c)=><div style={{flex:1,paddingLeft:16,borderLeft:"1px solid "+C.hair}}><div style={{fontFamily:F_DISPLAY,fontSize:38,fontWeight:500,color:c||C.navy,lineHeight:1}}>{v}</div><Cap style={{marginTop:7}}>{l}</Cap></div>;
-  const COLS="62px minmax(130px,1.5fr) 110px 100px 92px 98px repeat(4,26px)";
+  const COLS="74px minmax(130px,1.5fr) 110px 100px 92px 98px repeat(4,26px)";
   return(<Page>
     <TopBar/>
     <Masthead eyebrow={label} title={first?"Synthèse du portefeuille":"Synthèse du portefeuille (suite)"} sub={<span>{all.length} {plural(all.length,"projet","projets")} · classés du plus au moins critique</span>}/>
@@ -175,7 +175,7 @@ function SummaryPage({chunk,idx,label,page,total,all}){
         </div>
         {chunk.map((i,n)=>{const em=ETAT_META[i.r.etat]||ETAT_META["NOT ORDERED"];return(
           <div key={i.r.pj} style={{display:"grid",gridTemplateColumns:COLS,gap:12,alignItems:"center",padding:"6.5px 0",fontSize:11,borderBottom:"1px solid "+C.hair}}>
-            <span style={{fontWeight:800,color:C.navy,letterSpacing:".01em"}}>{i.r.pj}</span>
+            <span style={{fontWeight:800,color:C.navy,letterSpacing:".01em"}}>{i.r.pj}{i.meta.numSerie&&<div style={{fontSize:8.5,fontWeight:500,color:C.mute,letterSpacing:0,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>S/N {i.meta.numSerie}</div>}</span>
             <span style={{minWidth:0}}><div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i.meta.nomProjet}</div><div style={{fontSize:9,color:C.mute,marginTop:1,display:"flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,borderRadius:"50%",background:em.text}}/>{em.label}</div></span>
             <span style={{display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap",overflow:"hidden",color:C.ink2}}>{i.meta.pays&&i.meta.pays!=="—"&&<CountryFlag pays={i.meta.pays} size={11}/>}{i.meta.pays}</span>
             <span style={{display:"flex",alignItems:"center",gap:7}}><div style={{flex:1,height:4,borderRadius:4,background:C.hair,overflow:"hidden"}}><div style={{width:i.pv+"%",height:"100%",background:i.pv>=100?C.green:C.navy2,borderRadius:4}}/></div><span style={{fontWeight:700,fontSize:10,width:28,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{i.pv}%</span></span>
@@ -244,7 +244,7 @@ function PjPage({i,label,page,total,includeComments}){
   const note=t=><div style={{fontSize:9.5,color:C.mute,marginTop:4,lineHeight:1.35}}>{t}</div>;
   return(<Page>
     <TopBar/>
-    <Masthead eyebrow={label} title={<span style={{display:"inline-flex",alignItems:"baseline",gap:16}}><span style={{fontSize:36,fontWeight:700,letterSpacing:"-.02em"}}>{r.pj}</span>{r.gamme&&<span style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:26,fontWeight:500,color:C.navy3}}><span style={{width:11,height:11,borderRadius:"50%",background:C.brass,alignSelf:"center"}}/>{r.gamme}</span>}</span>}
+    <Masthead eyebrow={label} title={<span style={{display:"inline-flex",alignItems:"baseline",gap:16}}><span style={{fontSize:36,fontWeight:700,letterSpacing:"-.02em"}}>{r.pj}</span>{r.gamme&&<span style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:26,fontWeight:500,color:C.navy3}}><span style={{width:11,height:11,borderRadius:"50%",background:C.brass,alignSelf:"center"}}/>{r.gamme}</span>}{m.numSerie&&<span title="N° de série" style={{alignSelf:"center",fontSize:14,fontWeight:600,color:C.navy2,background:C.wash,border:"1px solid "+C.hair,borderRadius:7,padding:"2px 10px",letterSpacing:".02em",whiteSpace:"nowrap"}}>S/N {m.numSerie}</span>}</span>}
       sub={<><span style={{fontSize:14,fontWeight:500,color:C.ink2}}>{m.nomProjet||r.pj}</span>{m.chefProjet&&m.chefProjet!=="—"&&<span>{m.chefProjet}</span>}<span style={{display:"inline-flex",alignItems:"center",gap:6,color:C.ink2,fontWeight:600}}><span style={{width:7,height:7,borderRadius:"50%",background:em.text}}/>{em.label}</span>{hasPays&&<span style={{display:"inline-flex",alignItems:"center",gap:6}}><CountryFlag pays={m.pays} size={12}/>{m.pays}</span>}</>}
       right={wl?<span style={{display:"inline-flex",alignItems:"center",gap:4,background:TINT[wl],color:FC[wl],borderRadius:99,padding:"3px 12px 3px 5px",fontSize:10.5,fontWeight:800}}><Orb lv={wl} size={7}/>&nbsp;Statut global : {LEV[wl]}</span>:null}/>
     <div style={{flex:1,minHeight:0,padding:"4mm 12mm 0",display:"flex",flexDirection:"column",gap:"4mm"}}>
@@ -389,7 +389,7 @@ export function CodirDialog({data,initialData,comments,delays,progress,onClose})
               <label key={i.r.pj} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 12px",borderBottom:"1px solid "+T.surface,cursor:"pointer",background:on?T.teal100:"transparent"}}>
                 <input type="checkbox" checked={on} onChange={()=>toggle(i.r.pj)}/>
                 <div style={{minWidth:0,flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontFamily:T.fontMono,fontWeight:700,fontSize:12.5,color:T.teal600}}>{i.r.pj}</span><CountryFlag pays={i.meta.pays} size={11}/></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontFamily:T.fontMono,fontWeight:700,fontSize:12.5,color:T.teal600}}>{i.r.pj}</span><SerieTag pj={i.r.pj} size={10}/><CountryFlag pays={i.meta.pays} size={11}/></div>
                   <div style={{fontSize:11,color:T.ink500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{i.meta.nomProjet}</div>
                 </div>
                 <span style={{display:"inline-flex",gap:3}}>{FEUX.map(([k])=><span key={k} style={{width:7,height:7,borderRadius:"50%",background:i.feux[k]?FC[i.feux[k]]:T.ink100}}/>)}</span>

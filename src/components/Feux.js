@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { T } from "../theme";
-import { getPjMeta, CountryFlag } from "../pjMeta";
+import { getPjMeta, CountryFlag, SerieTag } from "../pjMeta";
 import { fmt, diffDays } from "../parsers";
 import { CARD, EmptyNote } from "./ManagerParts";
 
@@ -83,7 +83,7 @@ export function SanteTab({rows,onSave}){
           return(<div key={r.pj} style={{display:"grid",gridTemplateColumns:COLS,gap:12,alignItems:"center",padding:"7px 16px",borderBottom:"1px solid "+T.surface}}
             onMouseEnter={e=>e.currentTarget.style.background=T.surface} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             <div style={{minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontFamily:T.fontMono,fontWeight:700,fontSize:13,color:T.teal600}}>{r.pj}</span><CountryFlag pays={m.pays} size={11}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontFamily:T.fontMono,fontWeight:700,fontSize:13,color:T.teal600}}>{r.pj}</span><SerieTag pj={r.pj}/><CountryFlag pays={m.pays} size={11}/></div>
               <div title={m.nomProjet||""} style={{fontSize:11,color:T.ink300,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.nomProjet||""}</div>
             </div>
             {FEUX.map(([k])=><FeuPicker key={k} value={f[k]||null} onChange={lv=>onSave(r.pj,patchFeu(m,k,lv))}/>)}

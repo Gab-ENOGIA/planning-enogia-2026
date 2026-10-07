@@ -6,6 +6,7 @@ import { useSheetJS, Badge, DropFilter, NavIcon } from "./SharedUI";
 import { ProjectModal } from "./ProjectModal";
 
 export const TABLE_COLUMNS=[
+  {id:"serie",label:"N° de série"},
   {id:"projet",label:"Projet"},
   {id:"commentaires",label:"Commentaires"},
   {id:"pays",label:"Pays"},
@@ -82,7 +83,7 @@ function useDpr(){
   React.useEffect(()=>{const f=()=>setD(window.devicePixelRatio||1);window.addEventListener("resize",f);return()=>window.removeEventListener("resize",f);},[]);
   return d;
 }
-export const DEFAULT_COL_WIDTHS_PCT={pj:7,projet:13,pays:8,chef:5,gamme:7,etat:8,arrivee:8,tests:16,finprod:8,depart:8,avancement:7,commentaires:5};
+export const DEFAULT_COL_WIDTHS_PCT={pj:7,serie:7,projet:13,pays:8,chef:5,gamme:7,etat:8,arrivee:8,tests:16,finprod:8,depart:8,avancement:7,commentaires:5};
 export function ResizeHandle({colId,nextColId,colWidths,setColWidths,order,userSized,markSized}){
   const onMouseDown=e=>{
     e.preventDefault();
@@ -163,12 +164,13 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
   const cw=id=>userSized?(colWidths[id]||DEFAULT_COL_WIDTHS_PCT[id])+"%":undefined;
   const exportToExcel=()=>{
     if(!window.XLSX){alert("Librairie Excel en cours de chargement, réessayez dans 2 secondes.");return;}
-    const headers=["N° PJ","Projet","Pays","Chef de Projet","Gamme","État","Arrivée","Tests","Fin prod","Départ","Avancement (%)"];
+    const headers=["N° PJ","N° de série","Projet","Pays","Chef de Projet","Gamme","État","Arrivée","Tests","Fin prod","Départ","Avancement (%)"];
     const rows=data.map(r=>{
       const meta=getPjMeta(r.pj,r);
       const pval=progress[r.pj];
       return [
         r.pj,
+        meta.numSerie||"",
         meta.nomProjet,
         meta.pays,
         meta.chefProjet,
@@ -189,10 +191,10 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
     window.XLSX.writeFile(wb,"Planning_Enogia_"+dateStr+".xlsx");
   };
   // Liste ordonnée des colonnes actuellement visibles, pour savoir quelle est "la suivante" lors du redimensionnement
-  const visibleColOrder=["pj","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement","commentaires"].filter(id=>id==="pj"||show(id));
-  const allColOrder=["pj","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement","commentaires"].filter(id=>id==="pj"||show(id));
+  const visibleColOrder=["pj","serie","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement","commentaires"].filter(id=>id==="pj"||show(id));
+  const allColOrder=["pj","serie","projet","pays","chef","gamme","etat","arrivee","tests","finprod","depart","avancement","commentaires"].filter(id=>id==="pj"||show(id));
   const nextVisible=id=>{const i=visibleColOrder.indexOf(id);return i>=0&&i<visibleColOrder.length-1?visibleColOrder[i+1]:null;};
-  const thBase={padding:"10px "+PX+"px",textAlign:"left",fontWeight:600,color:T.ink500,fontSize:12.5,lineHeight:1.25,whiteSpace:"normal",position:"relative",overflow:"hidden",verticalAlign:"middle"};
+  const thBase={padding:"10px "+PX+"px",textAlign:"left",fontWeight:600,color:T.ink500,fontSize:12.5,lineHeight:1.25,whiteSpace:"normal",position:"sticky",top:0,zIndex:10,background:T.surface,boxShadow:"0 1px 0 "+T.line,overflow:"hidden",verticalAlign:"middle"};
   // Pas de cadre ni de carte ici (demandé explicitement : trop de bordures plus foncées que le
   // crème, ça faisait "bizarre") — aucun fond propre sur ce bloc, ni sur la barre d'outils, ni
   // sur l'en-tête du tableau, ni sur les lignes par défaut : tout reste au même crème que la
@@ -215,7 +217,7 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
         onMouseDown={e=>e.currentTarget.style.boxShadow=T.neuInSm} onMouseUp={e=>e.currentTarget.style.boxShadow=T.neuOutSm} onMouseLeave={e=>e.currentTarget.style.boxShadow=T.neuOutSm}><span style={{color:T.teal500,display:"flex"}}><NavIcon name="download" size={12}/></span>Export Excel</button>
       <ColumnPicker hidden={hiddenCols} setHidden={setHiddenCols}/>
     </div>
-    <div onScroll={e=>{const v=e.currentTarget.scrollLeft>0;if(v!==scrolledX)setScrolledX(v);}} style={{overflowX:"auto",overflowY:"visible",padding:"0 4px"}}>
+    <div onScroll={e=>{const v=e.currentTarget.scrollLeft>0;if(v!==scrolledX)setScrolledX(v);}} style={{overflow:"auto",maxHeight:"calc(100vh - 170px)",minHeight:240,padding:"0 4px"}}>
     {/* tableLayout:"auto" (plus "fixed") : les largeurs de colonnes ci-dessous ne sont plus que des
         points de départ — le navigateur élargit automatiquement une colonne si son contenu ne
         rentre pas, au lieu de le tronquer avec "..." ("ajuster automatiquement les colonnes pour
@@ -224,6 +226,7 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
     <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"auto",fontVariantNumeric:"tabular-nums"}}>
       <colgroup>
         <col style={{width:cw("pj")}}/>
+        {show("serie")&&<col style={{width:cw("serie")}}/>}
         {show("projet")&&<col style={{width:cw("projet")}}/>}
         {show("pays")&&<col style={{width:cw("pays")}}/>}
         {show("chef")&&<col style={{width:cw("chef")}}/>}
@@ -236,8 +239,9 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
         {show("avancement")&&<col style={{width:cw("avancement")}}/>}
         {show("commentaires")&&<col style={{width:cw("commentaires")}}/>}
       </colgroup>
-      <thead><tr style={{background:T.surface,boxShadow:"0 1px 0 "+T.line,position:"sticky",top:0,zIndex:10}}>
-        <th style={{...thBase,position:"sticky",left:0,zIndex:12,background:T.surface,boxShadow:scrolledX?"4px 0 6px -4px rgba(15,40,60,.22)":"none"}}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs||new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths} order={allColOrder} userSized={userSized} markSized={()=>setUserSized(true)}/></th>
+      <thead><tr>
+        <th style={{...thBase,left:0,zIndex:12,boxShadow:scrolledX?"4px 0 6px -4px rgba(15,40,60,.22), 0 1px 0 "+T.line:"0 1px 0 "+T.line}}>N° PJ {allPJs&&<DropFilter label="" icon options={allPJs} selected={selPJs||new Set(allPJs)} onChange={setSelPJs}/>}<ResizeHandle colId="pj" nextColId={nextVisible("pj")} colWidths={colWidths} setColWidths={setColWidths} order={allColOrder} userSized={userSized} markSized={()=>setUserSized(true)}/></th>
+        {show("serie")&&<th style={thBase}>{tight?"N° série":"N° de série"}<ResizeHandle colId="serie" nextColId={nextVisible("serie")} colWidths={colWidths} setColWidths={setColWidths} order={allColOrder} userSized={userSized} markSized={()=>setUserSized(true)}/></th>}
         {show("projet")&&<th style={thBase}>Projet {allProjets&&<DropFilter label="" icon options={allProjets} selected={selProjets||new Set(allProjets)} onChange={setSelProjets}/>}<ResizeHandle colId="projet" nextColId={nextVisible("projet")} colWidths={colWidths} setColWidths={setColWidths} order={allColOrder} userSized={userSized} markSized={()=>setUserSized(true)}/></th>}
         {show("pays")&&<th style={thBase}>Pays {allPays&&<DropFilter label="" icon options={allPays} selected={selPays||new Set(allPays)} onChange={setSelPays}/>}<ResizeHandle colId="pays" nextColId={nextVisible("pays")} colWidths={colWidths} setColWidths={setColWidths} order={allColOrder} userSized={userSized} markSized={()=>setUserSized(true)}/></th>}
         {show("chef")&&<th style={thBase}>Chef de Projet {allChefs&&<DropFilter label="" icon options={allChefs} selected={selChefs||new Set(allChefs)} onChange={setSelChefs} getLabel={o=>initials(o)+" — "+o}/>}<ResizeHandle colId="chef" nextColId={nextVisible("chef")} colWidths={colWidths} setColWidths={setColWidths} order={allColOrder} userSized={userSized} markSized={()=>setUserSized(true)}/></th>}
@@ -270,6 +274,7 @@ export function TableView({data,progress,df,setDf,selEtats,setSelEtats,selGammes
               <DriftDot drift={r.drift}/>
             </span>
           </td>
+          {show("serie")&&<td style={{padding:"6px "+PX+"px",whiteSpace:"nowrap",fontFamily:T.fontMono,fontSize:FS,color:meta.numSerie?T.ink700:T.ink100}}>{meta.numSerie||"—"}</td>}
           {show("projet")&&<td style={{padding:"6px "+PX+"px",color:T.ink900,fontSize:FS,fontWeight:600,letterSpacing:"-.005em",lineHeight:1.3,minWidth:tight?84:110}}><div title={meta.nomProjet} style={{display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",overflowWrap:"break-word"}}>{meta.nomProjet}</div></td>}
           {show("pays")&&<td style={{padding:"6px "+PX+"px",color:T.ink500,fontSize:FS,lineHeight:1.25}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{flexShrink:0,display:"inline-flex"}}><CountryFlag pays={meta.pays} size={14}/></span><span>{meta.pays}</span></span></td>}
           {show("chef")&&<td style={{padding:"6px "+PX+"px",whiteSpace:"nowrap",textAlign:"center"}}>

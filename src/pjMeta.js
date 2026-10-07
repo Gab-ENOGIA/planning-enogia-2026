@@ -273,6 +273,13 @@ export const ASSIGNABLE_ETATS=ALL_ETATS.filter(e=>e!=="A_DEFINIR");
 // même type de projet entre le gantt et le calendrier ça doit être un copier coller") — un seul
 // composant utilisé aux deux endroits évite que les deux colonnes ne puissent plus diverger par la
 // suite. Pastille = couleur de l'État (comme la liste), pas la couleur cyclique par machine.
+// Numéro de série de la machine (saisi dans Manager › Réglages › N° de série, champ numSerie de la fiche projet).
+// Étiquette discrète affichée à côté du numéro de PJ partout où il apparaît ; rien si non renseigné.
+export function SerieTag({pj,size=10.5,style}){
+  const n=(getPjMeta(pj)||{}).numSerie;
+  if(!n)return null;
+  return <span title={"N° de série : "+n} style={{display:"inline-block",fontFamily:T.fontMono,fontSize:size,fontWeight:600,color:T.ink500,background:T.surfaceAlt,borderRadius:5,padding:"0 6px",lineHeight:"17px",whiteSpace:"nowrap",flexShrink:0,...style}}>S/N {n}</span>;
+}
 export function ProjectLabelCell({pj,r,meta}){
   const c=ETAT_META[r.etat]||ETAT_META["NOT ORDERED"];
   // Le numéro de PJ et le nom du projet doivent TOUJOURS être lisibles (demandé explicitement) :
@@ -282,6 +289,7 @@ export function ProjectLabelCell({pj,r,meta}){
     <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
       <div style={{width:8,height:8,borderRadius:"50%",background:c.bar,flexShrink:0}}/>
       <span style={{fontSize:14.5,fontWeight:700,color:T.teal600,fontFamily:T.fontMono,whiteSpace:"nowrap",flexShrink:0}}>{pj}</span>
+      <SerieTag pj={pj}/>
       <span style={{fontStyle:"italic",fontSize:11,color:T.ink300,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",minWidth:0}}>{r.gamme}</span>
     </div>
     <div title={meta.nomProjet||""} style={{display:"flex",alignItems:"center",gap:6,paddingLeft:15,minWidth:0}}>

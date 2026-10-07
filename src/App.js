@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { db, auth, ALLOWED_EMAIL_DOMAIN } from "./firebase";
-import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, getDoc, onSnapshot, updateDoc, FieldPath, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import "./styles.css";
 
@@ -33,7 +33,7 @@ const DEFAULT_DELAY_TYPES=[
   "Aléas planning client","Retard études","Manque de main d'œuvre","Autre",
 ];
 
-const APP_BUILD_VERSION = "2026-10-06-v94-fiche-centree-barres-fines-arrondies";
+const APP_BUILD_VERSION = "2026-10-07-v96-import-liste-numeros-serie";
 
 export default function App(){
   // Utilisateur connecté via Google, restreint aux comptes @enogia.com (null tant que non connecté).
@@ -281,15 +281,26 @@ export default function App(){
     });
     return ()=>unsub();
   },[]);
+  // N'écrit QUE les champs modifiés du PJ concerné (chemin meta.<PJ>.<champ>, valeur remplacée en bloc). Avant, on réécrivait
+  // toute la table des PJ depuis l'état local : deux enregistrements rapprochés (saisie en série, collage de plusieurs
+  // N° de série) pouvaient s'écraser l'un l'autre avec des valeurs périmées, et un feu effacé restait en base (fusion profonde).
+  // En cas d'échec (document absent, règles…), on retombe sur l'ancienne écriture.
   const savePjMetaOverride=useCallback(async (pj,fields)=>{
-    const next={...pjOverridesState,[pj]:{...(pjOverridesState[pj]||{}),...fields}};
     try{
-      await setDoc(PJ_META_OVERRIDES_DOC_REF(), { meta:next }, { merge:true });
+      const args=[];
+      Object.entries(fields).forEach(([k,v])=>{args.push(new FieldPath("meta",pj,k),v===undefined?deleteField():v);});
+      await updateDoc(PJ_META_OVERRIDES_DOC_REF(),...args);
       return true;
-    }catch(e){
-      console.error(e);
-      alert("Erreur lors de l'enregistrement des infos projet : " + e.message);
-      return false;
+    }catch(e0){
+      const next={...pjOverridesState,[pj]:{...(pjOverridesState[pj]||{}),...fields}};
+      try{
+        await setDoc(PJ_META_OVERRIDES_DOC_REF(), { meta:next }, { merge:true });
+        return true;
+      }catch(e){
+        console.error(e);
+        alert("Erreur lors de l'enregistrement des infos projet : " + e.message);
+        return false;
+      }
     }
   },[pjOverridesState]);
 

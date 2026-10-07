@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { T } from "../theme";
-import { getPjMeta, PresenceChip, presenceKind, CountryFlag, MONTHS_FULL, today, ALL_GAMMES, getAllChefs, ALL_PAYS, relTime, Avatar } from "../pjMeta";
+import { SerieTag, getPjMeta, PresenceChip, presenceKind, CountryFlag, MONTHS_FULL, today, ALL_GAMMES, getAllChefs, ALL_PAYS, relTime, Avatar } from "../pjMeta";
 import { fmt, fmtMode } from "../parsers";
 import { Badge, NavIcon, Select, DelayScopeNote } from "./SharedUI";
 import { PHASES } from "./GanttView";
@@ -78,7 +78,7 @@ export function ProjectModal({pj,data,df,onClose,comments,addComment,deleteComme
               Fraunces essayé précédemment rendait ce titre différent de son équivalent dans le
               tableau au lieu de l'unifier. Taille/graisse plus marquées que dans le tableau (c'est un
               titre), mais même famille de police et même teinte bleu acier. */}
-          <div style={{fontFamily:T.fontMono,fontWeight:700,fontSize:17,color:T.teal600,letterSpacing:"-.01em"}}>{pj}</div>
+          <div style={{fontFamily:T.fontMono,fontWeight:700,fontSize:17,color:T.teal600,letterSpacing:"-.01em"}}>{pj}<SerieTag pj={pj} size={11} style={{marginLeft:10,verticalAlign:"middle"}}/></div>
           {editingMeta?
             <EditMetaForm meta={meta} gamme={r.gamme} onCancel={()=>setEditingMeta(false)} onSave={async fields=>{const ok=await savePjMetaOverride(pj,fields);if(ok)setEditingMeta(false);}}/>
             :<div style={{color:T.ink500,fontSize:13.5,marginTop:3,fontWeight:500,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>

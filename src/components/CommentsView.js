@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { T } from "../theme";
 import { fmt } from "../parsers";
-import { getPjMeta, CountryFlag, relTime, Avatar } from "../pjMeta";
+import { SerieTag, getPjMeta, CountryFlag, relTime, Avatar } from "../pjMeta";
 import { PjChecklist, NavIcon } from "./SharedUI";
 import { CommentsKanban } from "./CommentsKanban";
 
@@ -188,7 +188,7 @@ export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCo
               <div style={{width:30,height:30,borderRadius:"50%",background:T.surfaceAlt,flexShrink:0}}/>}
             <div style={{minWidth:0,flex:1}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:6}}>
-                <span style={{fontWeight:700,color:T.ink900,fontSize:13.5,display:"flex",alignItems:"center",gap:5}}>{row.pj}<CountryFlag pays={row.meta.pays} size={11}/></span>
+                <span style={{fontWeight:700,color:T.ink900,fontSize:13.5,display:"flex",alignItems:"center",gap:5}}>{row.pj}<SerieTag pj={row.pj}/><CountryFlag pays={row.meta.pays} size={11}/></span>
                 {row.last&&<span style={{fontSize:10.5,color:T.ink300,flexShrink:0}}>{relTime(row.last.date)}</span>}
               </div>
               <div style={{fontSize:12,color:T.ink500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
@@ -217,7 +217,7 @@ export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCo
               <Avatar name={c.author} tint={c.private?T.amber500:T.teal500}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:7,flexWrap:"wrap",marginBottom:2}}>
-                  <span onClick={()=>jumpToPj&&jumpToPj(c.pj)} style={{fontWeight:700,fontSize:13,color:T.teal600,fontFamily:T.fontMono,cursor:jumpToPj?"pointer":"default"}}>{c.pj}</span>
+                  <span onClick={()=>jumpToPj&&jumpToPj(c.pj)} style={{fontWeight:700,fontSize:13,color:T.teal600,fontFamily:T.fontMono,cursor:jumpToPj?"pointer":"default"}}>{c.pj}</span><SerieTag pj={c.pj}/>
                   <span style={{color:T.ink300,fontSize:12}}>·</span>
                   <span style={{fontWeight:600,color:T.ink700,fontSize:13}}>{c.author}</span>
                   {c.private&&<span title="Privé (BU ORC uniquement)" style={{fontSize:10.5,color:T.amber600,background:T.amber100,borderRadius:5,padding:"1px 6px",fontWeight:700}}>Privé</span>}
@@ -276,7 +276,7 @@ export function CommentsView({data,comments,addComment,deleteComment,pinOk,addCo
               <Avatar name={c.author} tint={c.private?T.amber500:T.teal500}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"baseline",gap:7,flexWrap:"wrap",marginBottom:2}}>
-                  <span onClick={()=>jumpToPj&&jumpToPj(c.pj)} style={{fontWeight:700,fontSize:13,color:T.teal600,fontFamily:T.fontMono,cursor:jumpToPj?"pointer":"default"}}>{c.pj}</span>
+                  <span onClick={()=>jumpToPj&&jumpToPj(c.pj)} style={{fontWeight:700,fontSize:13,color:T.teal600,fontFamily:T.fontMono,cursor:jumpToPj?"pointer":"default"}}>{c.pj}</span><SerieTag pj={c.pj}/>
                   <span style={{color:T.ink300,fontSize:12}}>·</span>
                   <span style={{fontWeight:600,color:T.ink700,fontSize:13}}>{c.author}</span>
                   {c.private&&<span title="Privé (BU ORC uniquement)" style={{fontSize:10.5,color:T.amber600,background:T.amber100,borderRadius:5,padding:"1px 6px",fontWeight:700}}>Privé</span>}

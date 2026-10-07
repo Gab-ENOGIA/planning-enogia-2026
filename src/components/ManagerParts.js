@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { T } from "../theme";
-import { getPjMeta, ETAT_META, ASSIGNABLE_ETATS, Avatar, relTime, PRESENCE_META, presenceKind, presenceBg } from "../pjMeta";
+import { SerieTag, getPjMeta, ETAT_META, ASSIGNABLE_ETATS, Avatar, relTime, PRESENCE_META, presenceKind, presenceBg } from "../pjMeta";
 import { fmt, toLocalISO } from "../parsers";
 import { Select, NavIcon, PjChecklist, DelayScopeNote } from "./SharedUI";
 
@@ -82,7 +82,7 @@ export function AvancementTab({rows,progress,setProgress,saveProgress,savingProg
         const col=pv>=100?T.emerald500:pv>=50?T.teal500:T.amber500;
         return(<div key={r.pj} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",border:"1px solid "+T.line,borderRadius:9,background:T.card}}>
           <div style={{width:124,flexShrink:0,minWidth:0}}>
-            <div style={{fontFamily:T.fontMono,fontWeight:700,fontSize:13,color:T.teal600}}>{r.pj}</div>
+            <div style={{fontFamily:T.fontMono,fontWeight:700,fontSize:13,color:T.teal600}}>{r.pj}<SerieTag pj={r.pj} style={{marginLeft:7}}/></div>
             <div title={meta.nomProjet||""} style={{fontSize:11,color:T.ink300,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet||r.gamme}</div>
           </div>
           <div title="Cliquer pour régler l'avancement" style={{flex:1,background:T.surfaceAlt,borderRadius:6,height:9,overflow:"hidden",cursor:"pointer"}}
@@ -152,7 +152,7 @@ export function StatutTab({rows,etatChoice,setEtatFor,clientPresence,setClientPr
       return(<div key={r.pj} style={{display:"grid",gridTemplateColumns:COLS,gap:12,alignItems:"center",padding:"7px 16px",borderBottom:"1px solid "+T.surface}}
         onMouseEnter={e=>e.currentTarget.style.background=T.surface} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
         <div style={{minWidth:0}}>
-          <div style={{fontFamily:T.fontMono,fontWeight:700,fontSize:13,color:T.teal600}}>{r.pj}</div>
+          <div style={{fontFamily:T.fontMono,fontWeight:700,fontSize:13,color:T.teal600}}>{r.pj}<SerieTag pj={r.pj} style={{marginLeft:7}}/></div>
           <div title={meta.nomProjet||""} style={{fontSize:11,color:T.ink300,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet||""}</div>
         </div>
         <span style={{fontSize:12.5,color:T.ink500}}>{r.gamme}</span>
@@ -360,6 +360,7 @@ export function DelaysTab({data,delays,delayTypes,setDelayTypes,addDelayAllocati
         {byPj
           ?<span style={{display:"inline-flex",alignItems:"center",gap:5,background:T.surface,borderRadius:999,padding:"1px 9px 1px 7px",fontSize:12,fontWeight:700,color:T.ink700}}><span style={{width:7,height:7,borderRadius:"50%",background:c}}/>{e.type}</span>
           :<span style={{fontFamily:T.fontMono,fontWeight:800,fontSize:13,color:T.teal600}}>{e.pj}</span>}
+        {!byPj&&<SerieTag pj={e.pj}/>}
         <span style={{fontSize:13,fontWeight:800,color:T.red500,background:T.red100,borderRadius:6,padding:"0 7px"}}>+{e.days}j</span>
         {e.groupPjs&&e.groupPjs.length>1&&<span title={e.groupPjs.join(", ")} style={{fontSize:10.5,color:T.violet600,background:T.violet100,borderRadius:6,padding:"1px 6px",fontWeight:700}}>×{e.groupPjs.length}</span>}
         <span style={{marginLeft:"auto"}}>
@@ -408,7 +409,7 @@ export function DelaysTab({data,delays,delayTypes,setDelayTypes,addDelayAllocati
             <div style={{padding:"10px 12px 9px",borderBottom:"2px solid "+c,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                  {view==="pj"?<span style={{fontFamily:T.fontMono,fontWeight:800,fontSize:14,color:T.teal600}}>{col.pj}</span>
+                  {view==="pj"?<span style={{fontFamily:T.fontMono,fontWeight:800,fontSize:14,color:T.teal600}}>{col.pj}<SerieTag pj={col.pj} style={{marginLeft:7}}/></span>
                     :<><span style={{width:9,height:9,borderRadius:"50%",background:c,flexShrink:0}}/><span style={{fontWeight:700,fontSize:14,color:T.ink900,overflowWrap:"anywhere"}}>{col.title}</span></>}
                 </div>
                 <div style={{fontSize:11.5,color:T.ink500,marginTop:2,overflowWrap:"anywhere"}}>{view==="pj"?(mm.nomProjet||""):col.items.length+" retard"+(col.items.length>1?"s":"")}{view==="pj"?" · "+col.items.length+" retard"+(col.items.length>1?"s":""):""}</div>

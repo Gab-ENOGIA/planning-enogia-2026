@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { T } from "../theme";
-import { ETAT_META, getPjMeta } from "../pjMeta";
+import { ETAT_META, getPjMeta, SerieTag } from "../pjMeta";
 import { parseMSProjectRows } from "../parsers";
 
 export function useSheetJS(){
@@ -131,7 +131,7 @@ export function PjChecklist({data,selected,onChange,maxHeight=220}){
         const checked=selected.has(d.pj);
         return(<div key={d.pj} onClick={()=>toggle(d.pj)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",cursor:"pointer",background:checked?T.teal100:"transparent",borderBottom:"1px solid "+T.surface}}>
           <div style={{width:15,height:15,borderRadius:4,border:"1.5px solid "+(checked?T.teal500:T.ink100),background:checked?T.teal500:T.card,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{checked&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}</div>
-          <span style={{fontWeight:700,color:T.ink900,fontSize:13,fontFamily:T.fontMono,flexShrink:0}}>{d.pj}</span>
+          <span style={{fontWeight:700,color:T.ink900,fontSize:13,fontFamily:T.fontMono,flexShrink:0}}>{d.pj}</span><SerieTag pj={d.pj}/>
           <span style={{fontSize:12.5,color:T.ink500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meta.nomProjet}</span>
         </div>);
       })}

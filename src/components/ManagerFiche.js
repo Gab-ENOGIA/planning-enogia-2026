@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import { T } from "../theme";
-import { getPjMeta, CountryFlag, Avatar, GAMME_COLORS, ETAT_META, PresenceChip, PRESENCE_META, presenceKind, today } from "../pjMeta";
+import { SerieTag, getPjMeta, CountryFlag, Avatar, GAMME_COLORS, ETAT_META, PresenceChip, PRESENCE_META, presenceKind, today } from "../pjMeta";
 import { fmt, diffDays } from "../parsers";
 import { Badge, NavIcon } from "./SharedUI";
 import { CARD, EmptyNote } from "./ManagerParts";
@@ -294,7 +294,7 @@ export function ProjectFileManager({data,initialData,comments,delays,progress,sa
           return(<div key={row.pj} onClick={()=>setSelPj(row.pj)} style={{padding:"6px 10px 6px 9px",cursor:"pointer",background:sel?T.teal100:"transparent",borderLeft:"3px solid "+(sel?T.teal500:"transparent"),borderBottom:"1px solid "+T.line}}>
             <div style={{display:"flex",alignItems:"center",gap:7}}>
               <span style={{width:8,height:8,borderRadius:"50%",background:ec.text,flexShrink:0}} title={ec.label}/>
-              <span style={{fontFamily:T.fontMono,fontWeight:700,color:T.teal600,fontSize:13}}>{row.pj}</span>
+              <span style={{fontFamily:T.fontMono,fontWeight:700,color:T.teal600,fontSize:13}}>{row.pj}</span><SerieTag pj={row.pj} size={10}/>
               <CountryFlag pays={m.pays} size={12}/>
               <span style={{marginLeft:"auto",fontSize:11,color:T.ink300,display:"inline-flex",alignItems:"center",gap:7}}>
                 {pk&&<span title={"Présence aux tests : "+pk} style={{width:8,height:8,borderRadius:"50%",background:pk==="both"?"linear-gradient(90deg,"+PRESENCE_META.both.color+" 50%,"+PRESENCE_META.both.color2+" 50%)":PRESENCE_META[pk].color}}/>}
@@ -327,6 +327,7 @@ export function ProjectFileManager({data,initialData,comments,delays,progress,sa
               <div style={{display:"flex",alignItems:"baseline",gap:16,flexWrap:"wrap"}}>
                 <span style={{fontSize:32,fontWeight:700,letterSpacing:"-.02em",lineHeight:1,color:T.ink900}}>{r.pj}</span>
                 <span style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:24,fontWeight:500,letterSpacing:"-.01em",lineHeight:1,color:T.ink700}}><span style={{width:11,height:11,borderRadius:"50%",background:gc,flexShrink:0}}/>{r.gamme}</span>
+                <SerieTag pj={r.pj} size={14} style={{alignSelf:"center",padding:"2px 10px",lineHeight:"20px",borderRadius:7}}/>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:7,fontSize:14.5,fontWeight:500,color:T.ink500}}>
                 <span>{meta.nomProjet}</span>
